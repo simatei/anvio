@@ -84,6 +84,8 @@ class WorkflowSuperClass:
 
 
     def init(self):
+        run.warning('We are initiating parameters for the %s workflow' % self.name)
+
         for rule in self.rules:
             if rule not in self.rule_acceptable_params_dict:
                 self.rule_acceptable_params_dict[rule] = []
@@ -93,7 +95,7 @@ class WorkflowSuperClass:
                 if param not in self.rule_acceptable_params_dict[rule]:
                     self.rule_acceptable_params_dict[rule].append(param)
 
-            general_params_that_all_workflows_must_accept = ['output_dirs']
+            general_params_that_all_workflows_must_accept = ['output_dirs', 'max_threads']
             for param in general_params_that_all_workflows_must_accept:
                 if param not in self.general_params:
                     self.general_params.append(param)
@@ -122,8 +124,16 @@ class WorkflowSuperClass:
             self.check_rule_params()
 
 
+    def sanity_checks(self):
+        ''' each workflow has its own sanity checks but we only run these when we go'''
+        # each workflow will overide this function with specific things to check
+        pass
+
+
     def go(self, skip_dry_run=False):
         """Do the actual running"""
+
+        self.sanity_checks()
 
         if self.save_workflow_graph or (not skip_dry_run):
             self.dry_run()
@@ -212,7 +222,7 @@ class WorkflowSuperClass:
         os.remove(log_file_path)
 
 
-    def check_workflow_program_dependencies(self, snakemake_workflow_object, dont_raise=False):
+    def check_workflow_program_dependencies(self, snakemake_workflow_object, dont_raise=True):
         """This function gets a snakemake workflow object and checks whether each shell command
            exists in the path.
         """
@@ -222,7 +232,7 @@ class WorkflowSuperClass:
 
         shell_programs_needed = [r.shellcmd.strip().split()[0] for r in snakemake_workflow_object.rules if r.shellcmd]
 
-        shell_programs_missing = [s for s in shell_programs_needed if not u.is_program_exists(s)]
+        shell_programs_missing = [s for s in shell_programs_needed if not u.is_program_exists(s, dont_raise=dont_raise)]
 
         run.warning(None, 'Shell programs for the workflow')
         run.info('Needed', ', '.join(shell_programs_needed))
@@ -249,6 +259,14 @@ class WorkflowSuperClass:
             raise ConfigError("some of the directory names in your config file are not familiar to us. \
                         Here is a list of the wrong directories: %s. This workflow only has \
                         the following directories: %s." % (" ".join(wrong_dir_names), " ".join(list(self.dirs_dict.keys()))))
+
+        ## make sure max_threads is an integer number
+        max_threads = self.get_param_value_from_config('max_threads')
+        if max_threads:
+            try:
+                int(max_threads)
+            except:
+                raise ConfigError('"max_threads" must be an integer value. The value you provided in the config file is: "%s"' % max_threads)
 
 
     def get_default_config(self):
@@ -384,16 +402,93 @@ class WorkflowSuperClass:
             "--min-occurence 5"
         '''
         val = self.get_param_value_from_config([_rule, _param])
-        if val:
+        if val is not None and val is not '':
             if isinstance(val, bool):
                 # the param is a flag so no need for a value
-                val = ''
-            return _param + ' ' + str(val)
+                if val:
+                    return _param
+            else:
+                return _param + ' ' + str(val)
+        return ''
+
+
+    def T(self, rule_name):
+        max_threads = self.get_param_value_from_config("max_threads")
+        if not max_threads:
+            max_threads = float("Inf")
+        threads = self.get_param_value_from_config([rule_name,'threads'])
+        if threads:
+            try:
+                if int(threads) > float(max_threads):
+                    return int(max_threads)
+                else:
+                    return int(threads)
+            except:
+                raise ConfigError('"threads" must be an integer number. In your config file you provided "%s" for \
+                                   the number of threads for rule "%s"' % (threads, rule_name))
         else:
-            return ''
+            return 1
 
 
-    def T(self, rule_name): return self.get_param_value_from_config([rule_name,'threads']) if self.get_param_value_from_config([rule_name,'threads']) else 1
+    def init_workflow_super_class(self, args, workflow_name):
+        '''
+            if a regular instance of workflow object is being generated, we
+            expect it to have a parameter `args`. if there is no `args` given, we
+            assume the class is being inherited as a base class from within another.
+
+            For a regular instance of a workflow this function will set the args
+            and init the WorkflowSuperClass.
+        '''
+        if args:
+            if len(self.__dict__):
+                raise ConfigError("Something is wrong. You are ineriting %s from \
+                                   within another class, yet you are providing an `args` parameter.\
+                                   This is not alright." % type(self))
+            self.args = args
+            self.name = workflow_name
+            WorkflowSuperClass.__init__(self)
+            self.run = run
+            self.progress = progress
+        else:
+            if not len(self.__dict__):
+                raise ConfigError("When you are *not* inheriting %s from within\
+                                   a super class, you must provide an `args` parameter." % type(self))
+            if 'name' not in self.__dict__:
+                raise ConfigError("The super class trying to inherit %s does not\
+                                   have a set `self.name`. Which means there may be other things\
+                                   wrong with it, hence anvi'o refuses to continue." % type(self))
+
+
+    def get_internal_and_external_genomes_files(self):
+            internal_genomes_file = self.get_param_value_from_config('internal_genomes')
+            external_genomes_file = self.get_param_value_from_config('external_genomes')
+
+            fasta_txt_file = self.get_param_value_from_config('fasta_txt', repress_default=True)
+            if fasta_txt_file and not external_genomes_file:
+                raise ConfigError('You provided a fasta_txt, but didn\'t specify a path for an external-genomes file. \
+                                   If you wish to use external genomes, you must specify a name for the external-genomes \
+                                   file, using the "external_genomes" parameter in your config file. Just to clarify: \
+                                   the external genomes file doesn\'t have to exist, since we will create it for you, \
+                                   by using the information you supplied in the "fasta_txt" file, but you must specify \
+                                   a name for the external-genomes file. For example, you could use "external_genomes": "external-genomes.txt", \
+                                   but feel free to be creative.')
+
+            if not internal_genomes_file and not external_genomes_file:
+                raise ConfigError('You must provide either an external genomes file or internal genomes file')
+            # here we do a little trick to make sure the rule can expect either one or both
+            d = {"internal_genomes_file": external_genomes_file,
+                                                              "external_genomes_file": internal_genomes_file}
+
+            if internal_genomes_file:
+                filesnpaths.is_file_exists(internal_genomes_file)
+                d['internal_genomes_file'] = internal_genomes_file
+
+            if external_genomes_file:
+                if not filesnpaths.is_file_exists(external_genomes_file, dont_raise=True):
+                    run.warning('There is no file %s. No worries, one will be created for you.' % external_genomes_file)
+                d['external_genomes_file'] = external_genomes_file
+
+            return d
 
 
 # The config file contains many essential configurations for the workflow
@@ -448,18 +543,24 @@ def B(config, _rule, _param, default=''):
         return ''
 
 
+def D(debug_message, debug_log_file_path=".SNAKEMAKEDEBUG"):
+    with open(debug_log_file_path, 'a') as output:
+            output.write(terminal.get_date() + '\n')
+            output.write(str(debug_message) + '\n\n')
+
+
 # a helper function to get the user defined number of threads for a rule
 def T(config, rule_name, N=1): return A([rule_name,'threads'], config, default_value=N)
 
 
-def get_dir_names(config):
+def get_dir_names(config, dont_raise=False):
     ########################################
     # Reading some definitions from config files (also some sanity checks)
     ########################################
     DICT = dirs_dict
     for d in A("output_dirs", config):
         # renaming folders according to the config file, if the user specified.
-        if d not in DICT:
+        if d not in DICT and not dont_raise:
             # making sure the user is asking to rename an existing folder.
             raise ConfigError("You define a name for the directory '%s' in your "\
                               "config file, but the only available folders are: "\
@@ -501,3 +602,11 @@ def warning_for_param(config, rule, param, wildcard, our_default=None):
             warning_message = warning_message + ' Just so you are aware, if you dont provide a value\
                                                  in the config file, the default value is %s' % wildcard
         run.warning(warning_message)
+
+
+def get_fields_for_fasta_information():
+    """ Return a list of legitimate column names for fasta.txt files"""
+    # Notice we don't include the name of the first column because
+    # utils.get_TAB_delimited_file_as_dictionary doesn't really care about it.
+    return ["path", "external_gene_calls", "gene_functional_annotation"]
+

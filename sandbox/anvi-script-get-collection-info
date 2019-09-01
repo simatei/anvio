@@ -1,118 +1,23 @@
 #!/usr/bin/env python
 # -*- coding: utf-8
 
-import os
 import sys
 
 import anvio
-import anvio.utils as utils
-import anvio.terminal as terminal
-import anvio.filesnpaths as filesnpaths
-import anvio.ccollections as ccollections
 
-from anvio.completeness import Completeness
-from anvio.errors import ConfigError, FilesNPathsError
-from anvio.dbops import ContigsSuperclass
+from anvio.errors import ConfigError
 
+__status__ = "Deprecated"
+__description__ = "Replaced by 'anvi-estimate-genome-completeness'"
 
-__author__ = "Developers of anvi'o (see AUTHORS.txt)"
-__copyright__ = "Copyleft 2015-2018, the Meren Lab (http://merenlab.org/)"
-__credits__ = []
-__license__ = "GPL 3.0"
-__version__ = anvio.__version__
-__maintainer__ = "A. Murat Eren"
-__email__ = "a.murat.eren@gmail.com"
-
-
-run = terminal.Run()
-progress = terminal.Progress()
-pp = terminal.pretty_print
-
-
-def main(args):
-    if args.output_file:
-        filesnpaths.is_output_file_writable(args.output_file)
-
-    collections = ccollections.Collections()
-    collections.populate_collections_dict(args.contigs_db)
-    if args.profile_db:
-        collections.populate_collections_dict(args.profile_db)
-
-    if args.list_collections:
-        collections.list_collections()
-        sys.exit()
-
-    if args.profile_db and not args.collection_name:
-        raise ConfigError("You can't use this program with a profile database but without a collection name. Yes. Because.")
-
-    if not args.collection_name:
-        run.warning("You did not provide a collection name. Anvi'o will assume that what is in your contigs database\
-                     is a a single genome (or genome bin).")
-
-    if args.collection_name and args.collection_name not in collections.collections_dict:
-        raise ConfigError("%s is not a valid collection ID. See a list of available ones with '--list-collections' flag" % args.collection_name)
-
-    completeness = Completeness(args.contigs_db)
-    if not len(completeness.sources):
-        raise ConfigError("HMM's were not run for this contigs database :/")
-
-    contigs_db = ContigsSuperclass(args, r = run, p = progress)
-
-    if args.collection_name:
-        collection = collections.get_collection_dict(args.collection_name)
-    else:
-        collection = {os.path.basename(args.contigs_db[:-3]): list(contigs_db.splits_basic_info.keys())}
-
-    run.info_single("Completion and redundancy estimates. PC: Percent completion; PR: Percent redundancy;\
-                     N: Number of splits; L: Length (total number of nucleotides); D: Domain for single-copy\
-                     core genes; C: Domain confidence.", nl_before=1, nl_after=1)
-
-    if args.collection_name:
-        run.warning(None, header = 'Bins in collection "%s"' % args.collection_name, lc = 'green')
-    else:
-        run.warning(None, header = 'Genome in "%s"' % os.path.basename(args.contigs_db), lc = 'green')
-
-    results_dict = {}
-    for bin_id in collection:
-        p_completion, p_redundancy, domain, domain_confidence, _ = completeness.get_info_for_splits(set(collection[bin_id]))
-        total_length = sum([contigs_db.splits_basic_info[split_name]['length'] for split_name in set(collection[bin_id])])
-        num_splits = len(collection[bin_id])
-
-        results_dict[bin_id] = {'domain': domain,
-                                'domain_confidence': '%.2f' % domain_confidence,
-                                'percent_completion': '%.2f' % p_completion,
-                                'percent_redundancy': '%.2f' % p_redundancy,
-                                'num_splits': num_splits,
-                                'total_length': total_length}
-
-        print("%s :: PC: %.2f%%, PR: %.2f%%, N: %s, L: %s, D: %s (C: %.2f)" % \
-                        (bin_id, p_completion, p_redundancy, pp(num_splits), pp(total_length), domain, domain_confidence))
-
-    print()
-
-    if args.output_file:
-        utils.store_dict_as_TAB_delimited_file(results_dict, args.output_file, headers = ['bins', 'domain', 'domain_confidence', 'percent_completion', 'percent_redundancy', 'num_splits', 'total_length'])
-        run.info('Output', args.output_file)
-
+def main():
+    raise ConfigError("This program is now known as 'anvi-estimate-genome-completeness'. At least\
+                       we made sure you can re-run the same command line above by only replacing\
+                       the program name.")
 
 if __name__ == '__main__':
-    import argparse
-
-    parser = argparse.ArgumentParser(description='Provides information about each bin in a given collection.')
-
-    parser.add_argument(*anvio.A('contigs-db'), **anvio.K('contigs-db'))
-    parser.add_argument(*anvio.A('profile-db'), **anvio.K('profile-db', {'required': False}))
-    parser.add_argument(*anvio.A('collection-name'), **anvio.K('collection-name'))
-    parser.add_argument(*anvio.A('list-collections'), **anvio.K('list-collections'))
-    parser.add_argument(*anvio.A('output-file'), **anvio.K('output-file'))
-
-    args = anvio.get_args(parser)
-
     try:
-        main(args)
+        main()
     except ConfigError as e:
         print(e)
-        sys.exit(-1)
-    except FilesNPathsError as e:
-        print(e)
-        sys.exit(-1)
+        sys.exit(1)

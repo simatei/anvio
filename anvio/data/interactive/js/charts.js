@@ -31,10 +31,14 @@ var state;
 var layers_ordered;
 var visible_layers;
 var contig_id;
+var page_header;
 var highlight_gene;
 var gene_mode;
 var show_snvs;
 var sequence;
+var charts;
+var brush;
+var inspect_mode;
 
 
 function loadAll() {
@@ -70,99 +74,146 @@ function loadAll() {
 
     if (typeof localStorage.state === 'undefined')
     {
-        alert("Something went wrong, couldn't access to localStorage");
+        state = {}
     }
     else
     {
-        // backup the state, if user changes the page (prev, next) we are going to overwrite it.
         state = JSON.parse(localStorage.state);
-        var endpoint = (gene_mode ? 'charts_for_single_gene' : 'charts');
-        $.ajax({
-                type: 'POST',
-                cache: false,
-                url: '/data/' + endpoint + '/' + state['order-by'] + '/' + contig_id,
-                data: {'state': JSON.stringify(state)},
-                success: function(contig_data) {
-                    page_header = contig_data.title;
-                    layers = contig_data.layers;
-                    coverage = contig_data.coverage;
-                    sequence = contig_data.sequence;
-                    variability = [];
+    }
 
-                    for (var i=0; i<coverage.length; i++) {
-                        variability[i] = [];
-                        for (var l=0; l<4; l++) {
-                            variability[i][l] = [];
-                            for (var h=0; h<coverage[i].length; h++) {
-                                if (contig_data.variability[i][l].hasOwnProperty(h)) {
-                                    variability[i][l].push(contig_data.variability[i][l][h]);
-                                    if (contig_data.variability[i][l][h] > maxVariability) {
-                                        maxVariability = contig_data.variability[i][l][h];
-                                    }
-                                } else {
-                                    variability[i][l].push(0);
+    var endpoint = (gene_mode ? 'charts_for_single_gene' : 'charts');
+    $.ajax({
+            type: 'POST',
+            cache: false,
+            url: '/data/' + endpoint + '/' + state['order-by'] + '/' + contig_id,
+            data: {'state': JSON.stringify(state)},
+            success: function(contig_data) {
+                state = contig_data['state'];
+                page_header = contig_data.title;
+                layers = contig_data.layers;
+                coverage = contig_data.coverage;
+                sequence = contig_data.sequence;
+                variability = [];
+
+                for (var i=0; i<coverage.length; i++) {
+                    variability[i] = [];
+                    for (var l=0; l<4; l++) {
+                        variability[i][l] = [];
+                        for (var h=0; h<coverage[i].length; h++) {
+                            if (contig_data.variability[i][l].hasOwnProperty(h)) {
+                                variability[i][l].push(contig_data.variability[i][l][h]);
+                                if (contig_data.variability[i][l][h] > maxVariability) {
+                                    maxVariability = contig_data.variability[i][l][h];
                                 }
+                            } else {
+                                variability[i][l].push(0);
                             }
                         }
                     }
-
-                    competing_nucleotides = contig_data.competing_nucleotides;
-                    previous_contig_name = contig_data.previous_contig_name;
-                    next_contig_name = contig_data.next_contig_name;
-                    index = contig_data.index;
-                    total = contig_data.total;
-                    genes = contig_data.genes;
-
-                    if(layers.length == 0){
-                        console.log('Warning: no layers returned')
-                    }
-
-                    next_str = " | next &gt;&gt;&gt;";
-                    prev_str = "&lt;&lt;&lt; prev | ";
-                    position = index + " of " + total;
-
-                    // anvi-server uses iframes for prettier urls, links need to be open _top
-                    var target_str = '';
-
-                    if (self != top) {
-                        target_str = 'target="_top"';
-                    }
-
-                    var inspect_mode = 'inspect';
-
-                    if (gene_mode) {
-                        inspect_mode = 'inspect_gene';
-                    }
-                    else if (highlight_gene) {
-                        inspect_mode = 'inspect_context';
-                    }
-
-                    if(next_contig_name)
-                        next_str = '<a onclick="localStorage.state = JSON.stringify(state);" href="' + generate_inspect_link({'type': inspect_mode, 'item_name': next_contig_name, 'show_snvs': show_snvs}) +'" '+target_str+'> | next &gt;&gt;&gt;</a>';
-
-                    if(previous_contig_name)
-                        prev_str = '<a onclick="localStorage.state = JSON.stringify(state);" href="' + generate_inspect_link({'type': inspect_mode, 'item_name': previous_contig_name, 'show_snvs': show_snvs}) + '" '+target_str+'>&lt;&lt;&lt; prev | </a>';
-
-                    $('#header').append("<strong>" + page_header + "</strong> detailed <br /><small><small>" + prev_str + position + next_str + "</small></small></br></br>");
-
-                    $('.main').prepend(`<div style="text-align: right; padding-left: 40px; padding-bottom: 20px; display: inline-block;"> \
-                                            <button type="button" class="btn btn-primary btn-xs" onclick="showOverlayGCContentDialog();" class="btn btn-outline-primary">Overlay GC Content</button> \
-                                            <button type="button" class="btn btn-primary btn-xs" onclick="resetOverlayGCContent();" class="btn btn-outline-primary">Reset overlay</button> \
-                                        </div>`);
-
-                    $('.main').prepend('<div style="text-align: left; padding-left: 40px; padding-bottom: 20px; display: inline-block;"> \
-                                            <button type="button" class="btn btn-primary btn-xs" onclick="showSetMaxValuesDialog()" class="btn btn-outline-primary">Set maximum values</button> \
-                                            <button type="button" class="btn btn-primary btn-xs" onclick="resetMaxValues()" class="btn btn-outline-primary">Reset maximum values</button> \
-                                        </div>');
-
-                    createCharts(state);
-                    $('.loading-screen').hide();
                 }
-            });
-    }
-    
+
+                competing_nucleotides = contig_data.competing_nucleotides;
+                previous_contig_name = contig_data.previous_contig_name;
+                next_contig_name = contig_data.next_contig_name;
+                index = contig_data.index;
+                total = contig_data.total;
+                genes = contig_data.genes;
+
+                if(layers.length == 0){
+                    console.log('Warning: no layers returned')
+                }
+
+                next_str = " | next &gt;&gt;&gt;";
+                prev_str = "&lt;&lt;&lt; prev | ";
+                position = index + " of " + total;
+
+                // anvi-server uses iframes for prettier urls, links need to be open _top
+                var target_str = '';
+
+                if (self != top) {
+                    target_str = 'target="_top"';
+                }
+
+                inspect_mode = 'inspect';
+
+                if (gene_mode) {
+                    inspect_mode = 'inspect_gene';
+                }
+                else if (highlight_gene) {
+                    inspect_mode = 'inspect_context';
+                }
+
+                if(next_contig_name)
+                    next_str = '<a onclick="localStorage.state = JSON.stringify(state);" href="' + generate_inspect_link({'type': inspect_mode, 'item_name': next_contig_name, 'show_snvs': show_snvs}) +'" '+target_str+'> | next &gt;&gt;&gt;</a>';
+
+                if(previous_contig_name)
+                    prev_str = '<a onclick="localStorage.state = JSON.stringify(state);" href="' + generate_inspect_link({'type': inspect_mode, 'item_name': previous_contig_name, 'show_snvs': show_snvs}) + '" '+target_str+'>&lt;&lt;&lt; prev | </a>';
+
+                $('#header').append("<strong>" + page_header + "</strong> detailed");
+                $('#header').append("<p><small><small>" + prev_str + position + next_str + "</small></small></p>");
+                $('#header').append("<p style='margin-top: -30px; margin-bottom: 15px;'><small><small><a href='#' onclick='showSearchItemsDialog();'>Select or Search Item</a></small></small></p>");
+
+                $('.main').prepend(`<div style="float: right; text-align: right; padding-right: 60px; padding-bottom: 20px; display: inline-block;" class="form-inline"> \
+                                        <b>Range:</b> 
+                                            <input class="form-control input-sm" id="brush_start" type="text" value="0" size="5"> 
+                                        <b>:</b> 
+                                            <input class="form-control input-sm" id="brush_end" type="text" value="${sequence.length}" size="5">\
+                                    </div>`);
+
+                $('.main').prepend(`<div style="text-align: right; padding-left: 40px; padding-bottom: 20px; display: inline-block;"> \
+                                        <button type="button" class="btn btn-primary btn-xs" onclick="show_sequence_modal('Sequence', page_header + '\\n' + sequence);">Get sequence</button> \
+                                        <button type="button" class="btn btn-primary btn-xs disabled btn-selection-sequence"  onclick="show_selected_sequence();" disabled>Get sequence of selected area</button> \
+                                    </div>`);
+
+                $('.main').prepend(`<div style="text-align: right; padding-left: 40px; padding-bottom: 20px; display: inline-block;"> \
+                                        <button type="button" class="btn btn-primary btn-xs" onclick="showOverlayGCContentDialog();" class="btn btn-outline-primary">Overlay GC Content</button> \
+                                        <button type="button" class="btn btn-primary btn-xs" onclick="resetOverlayGCContent();" class="btn btn-outline-primary">Reset overlay</button> \
+                                    </div>`);
+
+                $('.main').prepend('<div style="text-align: left; padding-left: 40px; padding-bottom: 20px; display: inline-block;"> \
+                                        <button type="button" class="btn btn-primary btn-xs" onclick="showSetMaxValuesDialog()" class="btn btn-outline-primary">Set maximum values</button> \
+                                        <button type="button" class="btn btn-primary btn-xs" onclick="resetMaxValues()" class="btn btn-outline-primary">Reset maximum values</button> \
+                                    </div>');
+
+                createCharts(state);
+                $('.loading-screen').hide();
+
+                $('#brush_start, #brush_end').keydown(function(ev) {
+                    if (ev.which == 13) {
+                        let start = parseInt($('#brush_start').val());
+                        let end = parseInt($('#brush_end').val());
+
+                        if (!isNumber(start) || !isNumber(end) || start < 0 || start > sequence.length || end < 0 || end > sequence.length) {
+                            alert(`Invalid value, value needs to be in range 0-${sequence.length}.`);
+                            return;
+                        }
+
+                        if (start >= end) {
+                            alert('Starting value cannot be greater or equal to the ending value.');
+                            return;
+                        }
+
+                        brush.extent([start, end]);
+                        brush(d3.select(".brush").transition());
+                        brush.event(d3.select(".brush").transition());
+                    }
+                });
+            }
+        });
+
 }
 
+
+function show_selected_sequence() {
+    let range = charts[0].xScale.domain();
+
+    // who knows?
+    range[0] = Math.max(range[0], 0);
+    range[1] = Math.min(range[1], sequence.length);
+
+    show_sequence_modal(`Sequence [${range[0]}, ${range[1]}]`, 
+        `${page_header} range:${range[0]},${range[1]}\n` + sequence.substring(range[0], range[1]));
+}
 
 function computeGCContent(window_size, step_size) {
     let gc_array = [];
@@ -290,6 +341,83 @@ function resetMaxValues() {
 }
 
 
+function showSearchItemsDialog() {
+    $('#searchItemDialog').modal('show');
+    $('#searchItemDialog .search-results').empty();
+}
+
+function search_items(search_query, page) {
+    if (typeof page === 'undefined') {
+        page = 0; 
+    }
+
+    // anvi-server uses iframes for prettier urls, links need to be open _top
+    var target_str = '';
+
+    if (self != top) {
+        target_str = 'target="_top"';
+    }
+
+    $('#searchItemDialog .search-results').empty();
+
+    $.ajax({
+            type: 'POST',
+            cache: false,
+            url: '/data/search_items',
+            data: {'search-query': search_query, 'page': page},
+            success: function(data) {
+                page = parseInt(data['page']);
+                search_query = data['search-query']
+                let total_page = parseInt(data['total_page']);
+
+                let results = data['results'];
+                let results_html = '';
+
+                for (let i=0; i < results.length; i++) {
+                    let item_name = results[i];
+                    let item_name_pretty = item_name;
+
+                    if (search_query.length > 0) {
+                        let begin = item_name.toLowerCase().indexOf(search_query.toLowerCase());
+                        item_name_pretty = [item_name.slice(0, begin), 
+                                           '<mark>', 
+                                           item_name.slice(begin, begin + search_query.length), 
+                                           '</mark>', 
+                                           item_name.slice(begin + search_query.length, item_name.length)
+                                           ].join("");
+
+                    }
+
+                    let link = '<a onclick="localStorage.state = JSON.stringify(state);" href="' + generate_inspect_link({'type': inspect_mode, 'item_name': item_name, 'show_snvs': show_snvs}) +'" '+target_str+'>' + item_name_pretty + '</a>';
+                    results_html += link + '<br />';
+
+                }
+
+                results_html += '<br /><br /><center>';
+
+                if (results.length > 0) {
+                    if (page > 0) {
+                    results_html += `<a href="#" onclick="search_items('${search_query}', ${page-1});">&lt;&lt;&lt; prev</a> | `;
+                    }
+
+                    results_html += " page " + (page + 1) + " of " + total_page;
+                    
+                    if (page + 1 < total_page) {
+                        results_html += ` | <a href="#" onclick="search_items('${search_query}', ${page+1});"> next &gt;&gt;&gt;</a>`;
+                    }
+                }
+                else
+                {
+                    results_html+="<b>No results found.</b>";
+                }
+
+                results_html += '</center>';
+
+                $('#searchItemDialog .search-results').append(results_html);
+            }
+        });
+}
+
 function createCharts(state){
     /* Adapted from Tyler Craft's Multiple area charts with D3.js article:
     http://tympanus.net/codrops/2012/08/29/multiple-area-charts-with-d3-js/  */
@@ -334,7 +462,7 @@ function createCharts(state){
     $('#chart-container').css("height", height + "px");
 
     
-    var charts = [];
+    charts = [];
     
     var layersCount = layers.length;
     
@@ -369,8 +497,9 @@ function createCharts(state){
     for(var i = 0; i < layersCount; i++){
         var layer_index = layers.indexOf(layers_ordered[i]);
 
-        if (parseFloat(state['layers'][layers_ordered[i]]['height']) == 0)
-          continue;
+        if (parseFloat(state['layers'][layers_ordered[i]]['height']) == 0) {
+            continue;
+        }
 
         charts.push(new Chart({
                         name: layers[layer_index],
@@ -441,7 +570,7 @@ function createCharts(state){
                 .y0(contextHeight)
                 .y1(0);
 
-    var brush = d3.svg.brush()
+    brush = d3.svg.brush()
                 .x(contextXScale)
                 .on("brushend", onBrush);
 
@@ -464,7 +593,18 @@ function createCharts(state){
     function onBrush(){
         /* this will return a date range to pass into the chart object */
         var b = brush.empty() ? contextXScale.domain() : brush.extent();
+        
+        if (brush.empty()) {
+            $('.btn-selection-sequence').addClass('disabled').prop('disabled', true);
+        } else {
+            $('.btn-selection-sequence').removeClass('disabled').prop('disabled', false);
+        }
+        
         b = [Math.floor(b[0]), Math.floor(b[1])];
+
+        $('#brush_start').val(b[0]);
+        $('#brush_end').val(b[1]);
+
         for(var i = 0; i < layersCount; i++){
             charts[i].showOnly(b);
         }
@@ -680,7 +820,7 @@ function Chart(options){
         
     this.chartContainer.append("g")
                    .attr("class", "y axis")
-                   .attr("transform", "translate(-15,0)")
+                   .attr("transform", "translate(-10,0)")
                    .call(this.yAxis);
 
     this.lineContainer.append("g")

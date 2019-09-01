@@ -19,6 +19,7 @@ __license__ = "GPL 3.0"
 __version__ = anvio.__version__
 __maintainer__ = "Alon Shaiber"
 __email__ = "alon.shaiber@gmail.com"
+__description__ = "A program to classify genes according to coverage across multiple metagenomes"
 
 
 def main(args):
@@ -27,10 +28,14 @@ def main(args):
     if args.output_file_prefix:
         mcg.write_output_to_files = True
 
-    args.init_gene_coverages = True
+    args.init_gene_coverages = False if args.get_samples_stats_only else True
+    args.init_split_coverage_values_per_nt = True
     args.populate_nt_level_coverage = True
     summary = summarizer.ProfileSummarizer(args)
     summary.init()
+    if not args.init_gene_coverages:
+        summary.init_split_coverage_values_per_nt_dict()
+
     bin_names_in_collection = summary.bin_ids
     if args.bin_ids_file:
         filesnpaths.is_file_exists(args.bin_ids_file)
@@ -55,13 +60,17 @@ def main(args):
         mcg.init(gene_level_coverage_stats_dict = _bin.gene_level_coverage_stats_dict, \
                     split_coverage_values_per_nt_dict = _bin.split_coverage_values_per_nt_dict, \
                     additional_description = bin_name)
-        mcg.classify()
+        if not args.get_samples_stats_only:
+            mcg.classify()
+        else:
+            mcg.init_samples_coverage_stats_dict()
+            mcg.save_samples_information()
 
 
 
 if __name__ == '__main__':
     import argparse
-    parser = argparse.ArgumentParser(description="A program to classify genes according to coverage across multiple metagenomes")
+    parser = argparse.ArgumentParser(description=__description__)
     group0 = parser.add_argument_group('ESSENTIAL INPUTS', "You must supply a merged profile db (along with a matching contigs db)")
     group0.add_argument(*anvio.A('profile-db'), **anvio.K('profile-db'))
     group0.add_argument(*anvio.A('contigs-db'), **anvio.K('contigs-db'))
@@ -78,6 +87,7 @@ if __name__ == '__main__':
     groupB.add_argument('--exclude-samples', metavar='FILE', default=None, help='List of samples to exclude for the analysis.')
     groupB.add_argument('--include-samples', metavar='FILE', default=None, help='List of samples to include for the analysis.')
     groupB.add_argument(*anvio.A('gen-figures'), **anvio.K('gen-figures'))
+    groupB.add_argument(*anvio.A('get-samples-stats-only'), **anvio.K('get-samples-stats-only'))
     groupB.add_argument(*anvio.A('overwrite-output-destinations'), **anvio.K('overwrite-output-destinations'))
     groupC = parser.add_argument_group("PARAMETERS","Parameters to determine cut-offs for the gene-classifier")
     groupC.add_argument('--alpha', '--genome-detection-uncertainty', metavar='NUM', type=float, default=0.25,
@@ -86,17 +96,7 @@ if __name__ == '__main__':
                         below  0.5-0.25 = 0.25 will be considered negative (i.e. donot contain the genome), samples with detection \
                         between 0.25 and 0.75 would be ambiguous (and hence would not be used for the classification), and samples with \
                         detection above 0.75 would be considered positive (i.e. contain the genome).')
-    groupC.add_argument('--outliers-threshold', metavar='NUM', type=float, default=2.5,
-                            help='Threshold to use for the outlier detection. \
-                            The default value is 2.5.\
-                            Absolute deviation around the median is used. \
-                            To read more about the method please refer to: \
-                            Boris Iglewicz and David Hoaglin (1993), "Volume 16: How to Detect and \
-                            Handle Outliers", The ASQC Basic References in Quality Control: \
-                            Statistical Techniques, Edward F. Mykytka, Ph.D., Editor. \
-                            Or to: \
-                            http://www.sciencedirect.com/science/article/pii/S0022103113000668 \
-                            ')
+    groupC.add_argument(*anvio.A('outliers-threshold'), **anvio.K('outliers-threshold'))
     groupC.add_argument(*anvio.A('zeros-are-outliers'), **anvio.K('zeros-are-outliers'))
     args = anvio.get_args(parser)
 

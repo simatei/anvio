@@ -1,0 +1,22 @@
+{
+    "fasta_txt": "fasta.txt",
+    "internal_genomes": "",
+    "external_genomes": "external-genomes.txt",
+    "anvi_gen_genomes_storage": {
+        "--gene-caller": "",
+        "threads": ""
+    },
+    "anvi_run_hmms": {
+        "run": false
+    },
+    "anvi_run_ncbi_cogs": {
+        "run": false
+    },
+    "project_name": "TEST",
+    "output_dirs": {
+        "FASTA_DIR": "01_FASTA",
+        "CONTIGS_DIR": "02_CONTIGS",
+        "PAN_DIR": "03_PAN",
+        "LOGS_DIR": "00_LOGS"
+    }
+}

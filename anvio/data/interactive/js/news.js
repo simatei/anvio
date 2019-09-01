@@ -1,7 +1,5 @@
 $(document).ready(function() {
-    if (getCookie('news_checked') == null) {
-        checkNews();
-    }
+    checkNews();
 });
 
 function checkNews() {
@@ -26,10 +24,10 @@ function checkNews() {
                                               <h1>' + ((hash_found) ? '' : '<span class="blue-dot">') + '</span>'+news_item['title']+'</h1> \
                                               <span class="news-date">'+news_item['date']+'</span>'+renderMarkdown(news_item['content'])+'</div>')
             }
-            createCookie('news_checked', 'yes', 1); // expiration is 1 days
 
             if (unread_count > 0) {
                 $('#toggle-panel-right-3').css('color', '#FF0000');
+                $('#toggle-panel-right-3').addClass('glowing-button');
             }
         }
     });
@@ -38,5 +36,6 @@ function checkNews() {
 function newsMarkRead() {
     $('.blue-dot').remove();
     $('#toggle-panel-right-3').css('color', '#000000');
+    $('#toggle-panel-right-3').removeClass('glowing-button');
     createCookie('last_seen_hash', md5($('.news-item > h1')[0].textContent), -1);
 }

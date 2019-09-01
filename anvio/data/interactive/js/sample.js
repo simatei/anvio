@@ -238,8 +238,7 @@ function update_samples_layer_min_max(select) {
 
 
 function buildSamplesTable(samples_layer_order, samples_layers) {
-    var order_from_state = true;
-    var all_information_layers = [];
+    var all_information_layers = samples_layer_order;
 
     for (let group in samples_information_dict) {
         let first_sample = Object.keys(samples_information_dict[group])[0];
@@ -265,14 +264,23 @@ function buildSamplesTable(samples_layer_order, samples_layers) {
     if (all_information_layers.length == 0) {
         return;
     }
-    
+
     $('#tbody_samples').empty();
 
     for (var i=0; i < all_information_layers.length; i++)
     {
         var layer_name = all_information_layers[i]['layer_name'];
         var group = all_information_layers[i]['group'];
+
+        if (!samples_information_dict.hasOwnProperty(group) || Object.keys(samples_information_dict[group]) < 1) {
+            continue;
+        }
+
         var first_sample = Object.keys(samples_information_dict[group])[0];
+
+        if (!samples_information_dict[group][first_sample].hasOwnProperty(layer_name)) {
+            continue;
+        }
 
         var pretty_name = getNamedLayerDefaults(layer_name, 'pretty_name', layer_name);
         pretty_name = (pretty_name.indexOf('!') > -1) ? pretty_name.split('!')[0] : pretty_name;
@@ -353,8 +361,6 @@ function buildSamplesTable(samples_layer_order, samples_layers) {
                                .replace(new RegExp('{min}', 'g'), min)
                                .replace(new RegExp('{max}', 'g'), max)
                                .replace(new RegExp('{margin}', 'g'), margin);
-            
-            $('#tbody_samples').append(template); 
         }
         else if (layer_name.indexOf(';') > -1) 
         {
@@ -401,15 +407,6 @@ function buildSamplesTable(samples_layer_order, samples_layers) {
                                .replace(new RegExp('{option-([a-z]*)}', 'g'), '')
                                .replace(new RegExp('{height}', 'g'), height)
                                .replace(new RegExp('{margin}', 'g'), margin);
-        
-            if (order_from_state)
-            {
-                $('#tbody_samples').append(template);
-            }
-            else
-            {
-                $('#tbody_samples').prepend(template);
-            }
         }
         else
         {
@@ -445,16 +442,8 @@ function buildSamplesTable(samples_layer_order, samples_layers) {
                                .replace(new RegExp('{short-name}', 'g'), short_name)
                                .replace(new RegExp('{height}', 'g'), height)
                                .replace(new RegExp('{margin}', 'g'), margin);
-        
-            if (order_from_state)
-            {
-                $('#tbody_samples').append(template);
-            }
-            else
-            {
-                $('#tbody_samples').prepend(template);
-            }
-        }  
+        }
+        $('#tbody_samples').append(template);
     }
 
     $('#tbody_samples .normalization').each((index, select) => {

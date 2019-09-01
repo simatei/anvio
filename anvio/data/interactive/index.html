@@ -57,6 +57,7 @@
     <script type="text/javascript" src="js/dialogs/store-collection.js"></script>
     <script type="text/javascript" src="js/dialogs/collapse-node.js"></script>
     <script type="text/javascript" src="js/dialogs/save-tree.js"></script>
+    <script type="text/javascript" src="js/dialogs/bigsi.js"></script>
     <script type="text/javascript" src="js/migrations.js"></script>
 
     <!-- Table sorter, source: https://github.com/drvic10k/bootstrap-sortable -->
@@ -136,7 +137,8 @@
                           <li><a href="https://github.com/meren/anvio/issues">Browse known issues / Report an issue</a></li>
                           <li><a href="http://merenlab.org/people/">Contact us</a></li>
                           <li role="separator" class="divider"></li>
-                          <li><p>Show help tooltips for the interactive interface: <input type="checkbox" name="show-help-tooltips" id="show-help-tooltips"></li>
+                          <li><a href="javascript:shutdownServer();"><span class="glyphicon glyphicon-off" aria-hidden="true"></span> Shutdown Server</a></li>
+                          <li><p>Show help tooltips for the interactive interface: <input type="checkbox" name="show-help-tooltips" id="show-help-tooltips"></p></li>
                         </ul>
                       </li>
                     </ul>
@@ -396,7 +398,7 @@
                                 </div>
 
                                 <div class="">
-                                    <div class="sidebar-bins-buttons btn-group col-md-12 full-mode pan-mode manual-mode" role="group" style="display: none">
+                                    <div class="sidebar-bins-buttons btn-group col-md-12 full-mode pan-mode manual-mode gene-mode" role="group" style="display: none">
                                         <button type="button" class="btn btn-default btn-sm" onclick="new LoadCollectionDialog().Show();" style="width: 50%"><span class="glyphicon glyphicon-floppy-open" aria-hidden="true"></span> Load bin collection</button>
                                         <button type="button" class="btn btn-default btn-sm" onclick="new StoreCollectionDialog().Show();" style="width: 50%" disabled-in-read-only="true"><span class="glyphicon glyphicon-floppy-save" aria-hidden="true"></span> Store bin collection</button>
                                     </div>
@@ -654,6 +656,16 @@
                                             <td><input class="form-control input-xs" size="6" parameter="max_geometric_homogeneity_index" type="text" value="1" disabled /></td>
                                         </tr>
                                         <tr>
+                                            <td><input class="form-control input-xs" type="checkbox" disabled id="min_combined"/></td>
+                                            <td>Min combined homogeneity index</td>
+                                            <td><input class="form-control input-xs" size="6" parameter="min_combined_homogeneity_index" type="text" value="-1" disabled /></td>
+                                        </tr>
+                                        <tr>
+                                            <td><input class="form-control input-xs" type="checkbox" disabled id="max_combined"/></td>
+                                            <td>Max combined homogeneity index</td>
+                                            <td><input class="form-control input-xs" size="6" parameter="max_combined_homogeneity_index" type="text" value="1" disabled /></td>
+                                        </tr>
+                                        <tr>
                                             <td></td>
                                             <td><button type="button" class="btn btn-default btn-sm" onclick="filterGeneClusters();" disabled><span class="glyphicon glyphicon-search" aria-hidden="true"></span> Search</button></td>
                                             <td></td>
@@ -765,7 +777,7 @@
     </div>
 
     <div id="news-panel">
-        <h1 style="font-size: 22px; display: inline-block;">What's New</h1><a href="#" style="color: gray; margin-top: 36px; float: right;" onclick="newsMarkRead(); ">Mark everything as read</a>
+        <h1 style="font-size: 22px; display: inline-block;">What's New</h1><a href="#" style="font-weight: bold; font-size: 14px; color: gray; margin-top: 36px; float: right;" onclick="newsMarkRead(); ">Mark everything as read&nbsp;</a>
         <div id="news-panel-inner"></div>
     </div>
     <!-- DIALOGS SECTION -->

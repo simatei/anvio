@@ -41,18 +41,6 @@ run = terminal.Run()
 progress = terminal.Progress()
 
 
-# Let's make sure we have CONCOCT available
-__CONCOCT_IS_AVAILABLE__ = False
-try:
-    import anvio.concoct as concoct
-    __CONCOCT_IS_AVAILABLE__ = True
-except ImportError as e:
-    run.warning("The CONCOCT module could not be imported :( Anvi'o will still be able to perform\
-                 the merging, however, the unsupervised binning results will not be available to\
-                 you in the resulting merged profile database. This is what the module was upset about:\
-                 '''%s''', in case you would like to fix this problem." % e)
-
-
 class MultipleRuns:
     def __init__(self, args, run=run, progress=progress):
         self.progress = progress
@@ -67,7 +55,6 @@ class MultipleRuns:
         self.output_directory = A('output_dir')
         self.skip_hierarchical_clustering = A('skip_hierarchical_clustering')
         self.enforce_hierarchical_clustering = A('enforce_hierarchical_clustering')
-        self.skip_concoct_binning = A('skip_concoct_binning')
         self.overwrite_output_destinations = A('overwrite_output_destinations')
         self.debug = A('debug')
         self.distance = A('distance') or constants.distance_metric_default
@@ -238,7 +225,7 @@ class MultipleRuns:
                  raise ConfigError("There is something wrong with your input databases. The group name 'default'\
                                     should be common to all of them, but it doesn't seem to be the case :/ How did\
                                     you end up with an anvi'o single profile database that doesn't have the 'default'\
-                                    gropu in its additional layer data table? It is very likely that your profiling\
+                                    group in its additional layer data table? It is very likely that your profiling\
                                     step failed for some reason for one or more of your databases :(")
 
         taxonomic_data_groups = set(constants.levels_of_taxonomy).intersection(data_groups_common_to_all_profile_dbs)
@@ -304,9 +291,19 @@ class MultipleRuns:
                      ('SNVs_profiled', 'SNV profiling flags (--skip-SNV-profiling)')]:
             v = set([r[k] for r in list(self.profile_dbs_info_dict.values())])
             if len(v) > 1:
-                raise ConfigError("%s are not identical for all profiles to be merged, which is a \
-                                    deal breaker. All profiles that are going to be merged must be\
-                                    run with identical flags and parameters :/" % p)
+                if anvio.FORCE:
+                    self.run.warning("Anvio'o found out that %s is not identical across all your profiles, but since you\
+                                      have used the `--force` flag, it will continue with the merge. This is very\
+                                      dangerous, and even if merging finishes succesfully, it does not mean you can trust\
+                                      your results to be error free. We believe you are prepared to deal with potential\
+                                      implications of forcing things because you are awesome." % p, lc="cyan")
+                else:
+                    raise ConfigError("Ouch. %s are not identical for all profiles to be merged, which is a \
+                                       deal breaker. All profiles that are going to be merged must be\
+                                       run with identical flags and parameters :/ You really shouldn't but if you want to\
+                                       try to force things because you believe this is due to a misunderstanding, you can\
+                                       use the flag --force. While you are considering this as an option, please also\
+                                       remember that this we advice against it.." % p)
 
         # get split names from one of the profile databases. split names must be identical across all
         self.split_names = sorted(list(utils.get_all_item_names_from_the_database(list(self.profile_dbs_info_dict.keys())[0])))
@@ -383,13 +380,23 @@ class MultipleRuns:
         output_file_path = os.path.join(self.output_directory, 'AUXILIARY-DATA.db')
         merged_split_coverage_values = auxiliarydataops.AuxiliaryDataForSplitCoverages(output_file_path, self.contigs_db_hash, create_new=True)
 
+        AUX = lambda x: os.path.join(os.path.dirname(x), 'AUXILIARY-DATA.db')
+
+        if False in [filesnpaths.is_file_exists(AUX(p), dont_raise=True) for p in self.profile_dbs_info_dict]:
+            self.run.warning("Some of your single profile databases to be merged are missing auxiliary data files associated with them. Did you\
+                              download them from somewhere and forgot to download the AUXILIARY-DATA.db files? Well. That's fine. Anvi'o will\
+                              continue merging your profiles without split coverages (which means you will not be able to inspect nucleotide\
+                              level coverage values and some other bells and whistles). If you want, you can kill this process now with CTRL+C\
+                              and redo it with all database files in proper places.")
+
+            return None
+
         self.progress.new('Merging split coverage data')
 
         # fill coverages in from all samples
         for input_profile_db_path in self.profile_dbs_info_dict:
             self.progress.update(input_profile_db_path)
-            input_file_path = os.path.join(os.path.dirname(input_profile_db_path), 'AUXILIARY-DATA.db')
-            sample_split_coverage_values = auxiliarydataops.AuxiliaryDataForSplitCoverages(input_file_path, self.contigs_db_hash)
+            sample_split_coverage_values = auxiliarydataops.AuxiliaryDataForSplitCoverages(AUX(input_profile_db_path), self.contigs_db_hash)
 
             for split_name in self.split_names:
                 coverages_dict = sample_split_coverage_values.get(split_name)
@@ -411,14 +418,6 @@ class MultipleRuns:
 
         smallest_sample_size = min(self.total_reads_mapped_per_sample.values())
         smallest_non_zero_sample_size = min([v for v in self.total_reads_mapped_per_sample.values() if v] or [0])
-
-        if smallest_sample_size == 0 and not self.skip_concoct_binning:
-            self.run.warning("At least one of the single profiles you are trying to merge has zero reads. Since anvi'o\
-                              is certain this will make CONCOCT freak out big time, it will set the flag `skip-concoct-binning`\
-                              to True (whihc means you will have no CONCOCT results in your merged profile database by default,\
-                              but you can always try later with `anvi-cluster-with-concoct` and see it fail in your own time).",
-                              header="CONCOCT WARNING")
-            self.skip_concoct_binning = True
 
         if smallest_non_zero_sample_size == 0 and not self.skip_hierarchical_clustering:
             self.run.warning("It seems none of the single profiles you are trying to merge has more than zero reads :/\
@@ -495,7 +494,7 @@ class MultipleRuns:
                        'total_reads_mapped': total_reads_mapped_list,
                        'merged': True,
                        'blank': False,
-                       'contigs_ordered': not self.skip_hierarchical_clustering,
+                       'items_ordered': False,
                        'default_view': 'mean_coverage',
                        'min_contig_length': self.min_contig_length,
                        'max_contig_length': self.max_contig_length,
@@ -555,13 +554,9 @@ class MultipleRuns:
 
         self.progress.end()
 
-        # run CONCOCT, if otherwise is not requested:
-        if not self.skip_concoct_binning and __CONCOCT_IS_AVAILABLE__:
-            self.bin_contigs_concoct()
-
         self.populate_misc_data_tables()
 
-        self.run.info_single('Happy.', nl_before=1, nl_after=1)
+        self.run.info_single('Happy ☘ ', nl_before=1, nl_after=1)
 
         self.run.quit()
 
@@ -698,27 +693,6 @@ class MultipleRuns:
             TablesForViews(self.merged_profile_db_path).remove(view_name='variability', table_names_to_blank=['variability_splits', 'variability_contigs'])
 
         self.progress.end()
-
-
-    def bin_contigs_concoct(self):
-        self.run.info_single("Automatic binning with CONCOCT...", nl_before=1, nl_after=1, mc="blue")
-
-        if not __CONCOCT_IS_AVAILABLE__:
-            self.run.warning('The CONCOCT module is not available. Skipping the unsupervised binning\
-                              with CONCOCT.')
-            return
-
-        class Args:
-            pass
-
-        args = Args()
-        args.profile_db = self.merged_profile_db_path
-        args.contigs_db = self.contigs_db_path
-        args.debug = self.debug
-
-        c = concoct.CONCOCT(args)
-        c.cluster()
-        c.store_clusters_in_db()
 
 
     def cluster_contigs_anvio(self):

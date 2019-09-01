@@ -172,6 +172,30 @@ def rev_comp_gene_calls_dict(gene_calls_dict, contig_sequence):
     return reverse_complemented_gene_calls, gene_caller_id_conversion_dict
 
 
+def serialize_args(args, single_dash=False, use_underscore=False, skip_keys=None, translate=None):
+    cmdline = []
+    for param, value in args.__dict__.items():
+        if isinstance(skip_keys, list):
+            if param in skip_keys:
+                continue
+
+        if param in translate:
+            param = translate[param]
+        
+        dash = '-' if single_dash else '--'
+
+        if not use_underscore:
+            param = param.replace('_', '-')
+
+        if value is True:
+            cmdline.append('%s%s' % (dash, param))
+        elif value is not False and value is not None:
+            cmdline.append('%s%s' % (dash, param))
+            cmdline.append(str(value))
+
+    return cmdline
+
+
 def get_predicted_type_of_items_in_a_dict(d, key):
     """Gets a dictionary `d` and a `key` in it, and returns a type function.
 
@@ -472,7 +496,18 @@ def store_dataframe_as_TAB_delimited_file(d, output_path, columns=None, include_
     return output_path
 
 
-def store_dict_as_TAB_delimited_file(d, output_path, headers=None, file_obj=None):
+def store_dict_as_TAB_delimited_file(d, output_path, headers=None, file_obj=None, key_header=None):
+    '''
+        Store a dictionary of dictionaries as a TAB-delimited file.
+        input:
+            d - dictionary of dictionaries
+            output_path - output path
+            headers - headers of the secondary dictionary to include (by default include all)
+                      these are the columns that will be included in the output file (this
+                      doesn't include the first column which is the keys of the major dictionary)
+            file_obj - file_object to use for writing
+            key_header - the header for the first column (by default: 'key')
+    '''
     if not file_obj:
         filesnpaths.is_output_file_writable(output_path)
 
@@ -481,8 +516,9 @@ def store_dict_as_TAB_delimited_file(d, output_path, headers=None, file_obj=None
     else:
         f = file_obj
 
+    key_header = key_header if key_header else 'key'
     if not headers:
-        headers = ['key'] + sorted(list(d.values())[0].keys())
+        headers = [key_header] + sorted(list(d.values())[0].keys())
 
     f.write('%s\n' % '\t'.join(headers))
 
@@ -696,7 +732,7 @@ def get_vectors_from_TAB_delim_matrix(file_path, cols_to_return=None, rows_to_re
     sample_to_id_dict = {}
 
     input_matrix = open(file_path, 'rU')
-    columns = input_matrix.readline().strip().split('\t')[1:]
+    columns = input_matrix.readline().strip('\n').split('\t')[1:]
 
     fields_of_interest = []
     if cols_to_return:
@@ -1339,17 +1375,28 @@ def get_contig_name_to_splits_dict(splits_basic_info_dict, contigs_basic_info_di
 def check_sample_id(sample_id):
     if sample_id:
         if sample_id[0] in constants.digits:
-            raise ConfigError("Sample name ('%s') is not a valid name. Sample names can't start with digits.\
-                                Long story. Please specify a sample name\
-                                that starts with an ASCII letter (you may want to check '-s' parameter to set\
-                                a sample name if your client permits (otherwise you are going to have to edit\
-                                your input files))." % sample_id)
+            raise ConfigError("The sample name ('%s') is not a valid one. Sample names can't start with digits.\
+                               Long story. Please specify a sample name that starts with an ASCII letter (if\
+                               there are no parameters available to you to set the sample name, it may be the\
+                               case that sample name is determined automatically from the input files you have\
+                               provided to whatever anvi'o workflow you were using, in which case you may need\
+                               to change your input file names or something :/)." % sample_id)
 
         allowed_chars_for_samples = constants.allowed_chars.replace('-', '').replace('.', '')
         if len([c for c in sample_id if c not in allowed_chars_for_samples]):
-            raise ConfigError("Sample name ('%s') contains characters that anvio does not like. Please\
-                                limit the characters that make up the project name to ASCII letters,\
-                                digits, and the underscore character ('_')." % sample_id)
+            raise ConfigError("The sample name ('%s') contains characters anvi'o does not like. Please\
+                               limit the characters that make up the project name to ASCII letters,\
+                               digits, and the underscore character ('_')." % sample_id)
+
+
+def check_collection_name(collection_name):
+    try:
+        check_sample_id(collection_name)
+    except:
+        raise ConfigError('"%s" is not a proper collection name. A proper one should be a single word and not contain\
+                            ANY characters but digits, ASCII letters and underscore character(s). There should not be\
+                            any space characters, and the collection name should not start with a digit.' % collection_name)
+
 
 
 def is_this_name_OK_for_database(variable_name, content, stringent=True):
@@ -1489,7 +1536,10 @@ def store_dict_as_FASTA_file(d, output_file_path, wrap_from=200):
 
     for key in d:
         output.write('>%s\n' % key)
-        output.write('%s\n' % textwrap.fill(d[key], wrap_from, break_on_hyphens=False))
+        if wrap_from:
+            output.write('%s\n' % textwrap.fill(d[key], wrap_from, break_on_hyphens=False))
+        else:
+            output.write('%s\n' % (d[key]))
 
     output.close()
     return True
@@ -1728,8 +1778,8 @@ def get_TAB_delimited_file_as_dictionary(file_path, expected_fields=None, dict_t
         for field in columns:
             if field not in expected_fields:
                 raise ConfigError("There are more fields in the file '%s' than the expected fields :/\
-                                    Anvi'o is telling you about this because get_TAB_delimited_file_as_dictionary\
-                                    funciton is called with `only_expected_fields` flag turned on.")
+                                   Anvi'o is telling you about this because get_TAB_delimited_file_as_dictionary\
+                                   funciton is called with `only_expected_fields` flag turned on." % (file_path))
 
     d = {}
     line_counter = 0
@@ -1769,6 +1819,13 @@ def get_TAB_delimited_file_as_dictionary(file_path, expected_fields=None, dict_t
             entry_name = 'line__%09d__' % line_counter
         else:
             entry_name = line_fields[indexing_field]
+
+        if entry_name in d:
+            raise ConfigError("The entry name %s appears more than once in the TAB-delimited file '%s'. We assume that you\
+                               did not do it that purposefully, but if you need this file in this form, then feel free to\
+                               contact us so we can try to find a solution for you. But if you have gotten this error while\
+                               working with HMMs, do not contact us since helping you in that case is beyond us (see the issue\
+                               #1206 for details))." % (entry_name, file_path))
 
         d[entry_name] = {}
 
@@ -2094,6 +2151,13 @@ def get_missing_programs_for_hmm_analysis():
     return missing_programs
 
 
+def get_genes_database_path_for_bin(profile_db_path, collection_name, bin_name):
+    if not collection_name or not bin_name:
+        raise ConfigError("Genes database must be associted with a collection name and a bin name :/")
+
+    return os.path.join(os.path.dirname(profile_db_path), 'GENES', '%s-%s.db' % (collection_name, bin_name))
+
+
 def get_db_type(db_path):
     filesnpaths.is_file_exists(db_path)
     database = db.DB(db_path, None, ignore_version=True)
@@ -2133,6 +2197,9 @@ def get_all_sample_names_from_the_database(db_path):
             pass
 
         return set(samples)
+
+    elif db_type == 'genes':
+        return set([str(i) for i in database.get_single_column_from_table(t.gene_level_coverage_stats_table_name, 'sample_name')])
 
     elif db_type == 'pan':
         internal_genome_names, external_genome_names = [], []
@@ -2175,6 +2242,8 @@ def get_all_item_names_from_the_database(db_path, run=run):
         all_items = set(database.get_single_column_from_table(t.pan_gene_clusters_table_name, 'gene_cluster_id'))
     elif db_type == 'contigs':
         all_items = set(database.get_single_column_from_table(t.splits_info_table_name, 'split'))
+    elif db_type == 'genes':
+        all_items = set([str(i) for i in database.get_single_column_from_table(t.gene_level_coverage_stats_table_name, 'gene_callers_id')])
     else:
         database.disconnect()
         raise ConfigError("You wanted to get all items in the database %s, but no one here knows about its type. Seriously,\
@@ -2221,9 +2290,22 @@ def is_contigs_db(db_path):
     return True
 
 
-def is_pan_or_profile_db(db_path):
-    if get_db_type(db_path) not in ['pan', 'profile']:
-        raise ConfigError("'%s' is neither a pan nor a profile database :/ Someone is in trouble." % db_path)
+def is_pan_or_profile_db(db_path, genes_db_is_also_accepted=False):
+    ok_db_types = ['pan', 'profile']
+
+    if genes_db_is_also_accepted:
+        ok_db_types += ['genes']
+
+    db_type = get_db_type(db_path)
+
+    if db_type not in ok_db_types:
+        if genes_db_is_also_accepted:
+            raise ConfigError("'%s' is not a pan, profile, or a genes database :/ Anvi'o wants what it wants and this \
+                               '%s' database is not it." % (db_path, db_type))
+        else:
+            raise ConfigError("'%s' is neither a pan nor a profile database :/ Someone is in trouble (*cough* 'someone' \
+                                being whoever sent this %s database as a parameter to that command *cough*)." % (db_path, db_type))
+
     return True
 
 
@@ -2262,14 +2344,23 @@ def get_two_sample_z_test_statistic(p1, p2, n1, n2):
     '''
     import numpy
     if p1 == 0 and p2 == 0:
-        return (0, 0)
+        return (0, 1)
 
+    inequality_sign = p1 > p2
     # This is done in order to estimate an upper bound
     # for the p-value
     p1 = max(p1, 1/n1) # in case p1 is zero
     p2 = max(p2, 1/n2)
     p1 = min(p1, 1 - 1/n1) # in case p1 is 1
     p2 = min(p2, 1 - 1/n2)
+
+    new_inequality_sign = p1 > p2
+    if new_inequality_sign != inequality_sign:
+        # if the portion correction changed the direction of the inequality
+        # then there is no power to this test.
+        # This would only happen when the groups in questions are very small anyway,
+        # but we want to be on the safe side.
+        return (0,1)
 
     p = (n1*p1 + n2*p2) / (n1 + n2)
 
@@ -2286,6 +2377,12 @@ def get_p_value_for_z_test(z):
 def is_pan_db(db_path):
     if get_db_type(db_path) != 'pan':
         raise ConfigError("'%s' is not an anvi'o pan database." % db_path)
+    return True
+
+
+def is_genes_db(db_path):
+    if get_db_type(db_path) != 'genes':
+        raise ConfigError("'%s' is not an anvi'o genes database." % db_path)
     return True
 
 
@@ -2415,6 +2512,10 @@ def download_protein_structures(protein_code_list, output_dir):
     return protein_code_list
 
 
+def get_hash_for_list(l):
+    return 'hash' + str(hashlib.sha224(''.join(sorted(list(l))).encode('utf-8')).hexdigest()[0:8])
+
+
 def get_file_md5(file_path):
     hash_md5 = hashlib.md5()
 
@@ -2481,6 +2582,22 @@ def open_url_in_browser(url, browser_path=None, run=run):
         webbrowser.get('users_preferred_browser').open_new(url)
     else:
         webbrowser.open_new(url)
+
+
+def check_h5py_module():
+    """To make sure we do have the h5py module.
+
+       The reason this function is here is becasue we removed h5py from anvi'o dependencies,
+       but some migration scripts may still need it if the user has very old databases. In
+       those cases the user must install it manually."""
+
+    try:
+        import h5py
+    except:
+        raise ConfigError("Please install the Python module `h5py` manually for this migration task to continue.\
+                           The reason why the standard anvi'o installation did not install module is complicated,\
+                           and really unimportant. If you run `pip install h5py` in your Python virtual environmnet\
+                           for anvi'o, and try running the migration program again things should be alright.")
 
 
 def RepresentsInt(s):

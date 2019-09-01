@@ -255,6 +255,11 @@ class PanSummarizer(PanSuperclass, SummarizerSuperClass):
         if not self.skip_init_functions:
             self.init_gene_clusters_functions()
 
+        self.collection_dict, self.bins_info_dict, self.bin_ids = None, None, None
+        if self.collection_name:
+            self.collection_dict, self.bins_info_dict = self.init_collection_profile(self.collection_name)
+            self.bin_ids = sorted(self.collection_dict.keys())
+
         # see if COG functions or categories are available
         self.cog_functions_are_called = 'COG_FUNCTION' in self.gene_clusters_function_sources
         self.cog_categories_are_called = 'COG_CATEGORY' in self.gene_clusters_function_sources
@@ -274,11 +279,13 @@ class PanSummarizer(PanSuperclass, SummarizerSuperClass):
 
         for gene_cluster_id in gene_clusters_functions_summary_dict:
             gene_cluster_function = gene_clusters_functions_summary_dict[gene_cluster_id]['gene_cluster_function']
+            gene_cluster_function_accession = gene_clusters_functions_summary_dict[gene_cluster_id]['gene_cluster_function_accession']
             if gene_cluster_function:
                 if gene_cluster_function not in occurrence_of_functions_in_pangenome_dict:
                     occurrence_of_functions_in_pangenome_dict[gene_cluster_function] = {}
                     occurrence_of_functions_in_pangenome_dict[gene_cluster_function]['gene_clusters_ids'] = []
                     occurrence_of_functions_in_pangenome_dict[gene_cluster_function]['occurrence'] = None
+                    occurrence_of_functions_in_pangenome_dict[gene_cluster_function]['accession'] = gene_cluster_function_accession
                 occurrence_of_functions_in_pangenome_dict[gene_cluster_function]['gene_clusters_ids'].append(gene_cluster_id)
 
         from anvio.dbops import PanDatabase
@@ -447,6 +454,7 @@ class PanSummarizer(PanSuperclass, SummarizerSuperClass):
                 enrichment_dict[c][f]["occurrence_in_group"] = occurrence_in_group
                 enrichment_dict[c][f]["occurrence_outside_of_group"] = occurrence_outside_of_group
                 enrichment_dict[c][f]["gene_clusters_ids"] = occurrence_of_functions_in_pangenome_dict[f]["gene_clusters_ids"]
+                enrichment_dict[c][f]["function_accession"] = occurrence_of_functions_in_pangenome_dict[f]["accession"]
                 enrichment_dict[c][f]["core_in_group"] = False
                 enrichment_dict[c][f]["core"] = False
                 if enrichment_dict[c][f]["portion_occurrence_in_group"] >= core_threshold:
@@ -502,13 +510,16 @@ class PanSummarizer(PanSuperclass, SummarizerSuperClass):
                 D[i]['category'] = c
                 D[i][functional_annotation_source] = f
                 for key, value in enrichment_dict[c][f].items():
-                    try:
-                        # if there is a sequence of values
-                        # merge them with commas for nicer printing
-                        D[i][key] = ', '.join(iter(value))
-                    except:
-                        # if it is not a sequnce, it is a single value
+                    if type(value)==str:
                         D[i][key] = value
+                    else:
+                        try:
+                            # if there is a sequence of values
+                            # merge them with commas for nicer printing
+                                D[i][key] = ', '.join(iter(value))
+                        except:
+                            # if it is not a sequnce, it is a single value
+                            D[i][key] = value
                 i += 1
         enrichment_data_frame = pd.DataFrame.from_dict(D, orient='index')
 
@@ -516,9 +527,6 @@ class PanSummarizer(PanSuperclass, SummarizerSuperClass):
 
 
     def process(self):
-        # init profile data for colletion.
-        collection_dict, bins_info_dict = self.init_collection_profile(self.collection_name)
-
         # let bin names known to all
         bin_ids = list(self.collection_profile.keys())
 
@@ -568,7 +576,7 @@ class PanSummarizer(PanSuperclass, SummarizerSuperClass):
         self.summary['files'] = {}
         self.summary['collection_profile'] = self.collection_profile # reminder; collection_profile comes from the superclass!
 
-        self.generate_gene_clusters_file(collection_dict)
+        self.generate_gene_clusters_file(self.collection_dict)
 
         self.report_misc_data_files(target_table='layers')
         self.report_misc_data_files(target_table='items')
@@ -659,7 +667,6 @@ class PanSummarizer(PanSuperclass, SummarizerSuperClass):
 
                     output_file_obj.write(('\t'.join([str(e) if e not in [None, 'UNKNOWN'] else '' for e in entry]) + '\n').encode('utf-8'))
                     unique_id += 1
-
 
         # we're done here.
         output_file_obj.close()
@@ -1275,6 +1282,9 @@ class ContigSummarizer(SummarizerSuperClass):
             for e in list(c.genes_in_splits.values()):
                 if e['split'] in split_names:
                     process_gene_call(e['gene_callers_id'])
+
+            info_dict['num_splits'] = len(split_names)
+            info_dict['num_contigs'] = len(set([c.splits_basic_info[split_name]['parent'] for split_name in split_names]))
         else:
             c.init_contig_sequences()
             seq = ''.join([e['sequence'] for e in list(c.contig_sequences.values())])
@@ -1308,7 +1318,8 @@ class ContigSummarizer(SummarizerSuperClass):
             info_dict['avg_gene_length'], info_dict['num_genes_per_kb'] = 0.0, 0
 
         # get completeness / contamination estimates
-        p_completion, p_redundancy, domain, domain_confidence, results_dict = completeness.Completeness(self.contigs_db_path).get_info_for_splits(split_names if split_names else set(c.splits_basic_info.keys()))
+        p_completion, p_redundancy, domain, domain_probabilities, info_text, results_dict = completeness.Completeness(self.contigs_db_path).get_info_for_splits(split_names if split_names else set(c.splits_basic_info.keys()))
+        domain_confidence = domain_probabilities[domain] if domain else 0.0
 
         info_dict['hmm_sources_info'] = c.hmm_sources_info
         info_dict['percent_completion'] = p_completion
@@ -1399,6 +1410,45 @@ class ContigSummarizer(SummarizerSuperClass):
                 contigs_index += 1
 
         return results
+
+
+class PanBin:
+    def __init__(self, summary, bin_id, r=run, p=progress):
+        self.summary = summary
+        self.progress = p
+        self.run = r
+
+        if bin_id not in self.summary.bin_ids:
+            raise ConfigError("Bin '%s' does not seem to be in this summary :/ These are the ones in it: %s." % (bin_id, ', '.join(self.summary.bin_ids)))
+
+        self.bin_id = bin_id
+        self.split_names = summary.collection_dict[self.bin_id]
+        self.views = {}
+        self.genomes = []
+
+        self.num_gene_clusters = None
+        self.num_genes_in_gene_clusters = None
+
+        self.num_splits = len(self.split_names)
+
+        # here we are subsetting views based on what gene clusters are available
+        # in this particular bin.
+        for view in self.summary.views:
+            self.views[view] = {}
+            self.views[view]['table_name'] = self.summary.views[view]['table_name']
+            self.views[view]['header'] = self.summary.views[view]['header']
+            self.views[view]['dict'] = {}
+
+            for split_name in self.split_names:
+                self.views[view]['dict'][split_name] = self.summary.views[view]['dict'][split_name]
+
+            if not self.genomes:
+                self.genomes = self.views[view]['header']
+
+        if 'gene_cluster_frequencies' in self.views:
+            self.num_gene_clusters = len(self.views['gene_cluster_frequencies']['dict'])
+            self.num_genes_in_gene_clusters = sum([sum(x.values()) for x in self.views['gene_cluster_frequencies']['dict'].values()])
+
 
 class Bin:
     def __init__(self, summary, bin_id, r=run, p=progress):
@@ -1516,7 +1566,8 @@ class Bin:
     def access_completeness_scores(self):
         self.progress.update('Accessing completeness scores ...')
 
-        p_completion, p_redundancy, domain, domain_confidence, results_dict = self.summary.completeness.get_info_for_splits(set(self.split_names))
+        p_completion, p_redundancy, domain, domain_probabilities, info_text, results_dict = self.summary.completeness.get_info_for_splits(set(self.split_names))
+        domain_confidence = domain_probabilities[domain] if domain else 0.0
 
         self.bin_info_dict['completeness'] = results_dict
 

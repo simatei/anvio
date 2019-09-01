@@ -24,6 +24,7 @@ __maintainer__ = "A. Murat Eren"
 __email__ = "a.murat.eren@gmail.com"
 __requires__ = ['linkmers-txt',]
 __provides__ = ['oligotypes',]
+__description__ = "Takes an anvi'o linkmers report, generates an oligotyping output"
 
 
 run = terminal.Run()
@@ -67,7 +68,11 @@ def main(args):
     # that this might blow up sooner or later, but I will think of a better solution then.
     for request_id in d:
         for sample_id in d[request_id]:
-            normalization_factor = len(list(list(d[request_id].values())[0].keys())[0])
+            try:
+                normalization_factor = len(list(list(d[request_id].values())[0].keys())[0])
+            except IndexError:
+                normalization_factor = 1.0
+
             for oligotype in d[request_id][sample_id]:
                 d[request_id][sample_id][oligotype] = d[request_id][sample_id][oligotype] / normalization_factor
 
@@ -82,7 +87,7 @@ def main(args):
 if __name__ == '__main__':
     import argparse
 
-    parser = argparse.ArgumentParser(description="Takes an anvi'o linkmers report, generates an oligotyping output")
+    parser = argparse.ArgumentParser(description=__description__)
 
     parser.add_argument('-i', '--input-file', metavar = 'LINKMER_REPORT', required = True,
                         help = 'Output file of `anvi-report-linkmers`.')

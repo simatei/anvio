@@ -345,11 +345,11 @@ class LinkMers:
     def list_contigs(self):
         self.progress.new('Init')
         self.progress.update('Reading BAM File')
-        bam_file_object = BAMFileObject(self.input_file_path).get()
+        bam_file_object = BAMFileObject(self.input_file_paths[0]).get()
         self.progress.end()
 
-        contig_names = self.bam.references
-        contig_lengths = self.bam.lengths
+        contig_names = bam_file_object.references
+        contig_lengths = bam_file_object.lengths
 
         bam_file_object.close()
 
@@ -392,6 +392,8 @@ class GetReadsFromBAM:
 
 
     def init(self):
+        utils.is_contigs_db(self.contigs_db_path)
+
         self.run.info('Input BAM file(s)', ', '.join([os.path.basename(f) for f in self.input_bam_files]))
 
         d = ccollections.GetSplitNamesInBins(self.args).get_dict()

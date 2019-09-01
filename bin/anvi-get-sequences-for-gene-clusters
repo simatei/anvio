@@ -25,6 +25,7 @@ __maintainer__ = "A. Murat Eren"
 __email__ = "a.murat.eren@gmail.com"
 __requires__ = ['pan-db', 'genomes-storage-db']
 __provides__ = ['genes-fasta', 'concatenated-gene-alignment-fasta']
+__description__ = "Do cool stuff with gene clusters in anvi'o pan genomes"
 
 
 run = terminal.Run()
@@ -100,7 +101,7 @@ def main(args):
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description="Do cool stuff with gene clusters in anvi'o pan genomes")
+    parser = argparse.ArgumentParser(description=__description__)
 
     groupA = parser.add_argument_group('INPUT FILES', "Input files from the pangenome analysis.")
     groupA.add_argument(*anvio.A('pan-db'), **anvio.K('pan-db'))
@@ -108,7 +109,7 @@ if __name__ == '__main__':
 
     groupB = parser.add_argument_group('OUTPUT', "You get to chose an output file name to report things. The default will be\
                                        an ugly name. So, be explicit.")
-    groupB.add_argument(*anvio.A('output-file'), **anvio.K('output-file'))
+    groupB.add_argument(*anvio.A('output-file'), **anvio.K('output-file',{'metavar':'FASTA'}))
     groupB.add_argument(*anvio.A('report-DNA-sequences'), **anvio.K('report-DNA-sequences'))
 
     groupC = parser.add_argument_group('SELECTION', "Which gene clusters should be reported. You can ask for a single gene cluster,\
@@ -132,6 +133,8 @@ if __name__ == '__main__':
     groupD.add_argument(*anvio.A('max-functional-homogeneity-index'), **anvio.K('max-functional-homogeneity-index'))
     groupD.add_argument(*anvio.A('min-geometric-homogeneity-index'), **anvio.K('min-geometric-homogeneity-index'))
     groupD.add_argument(*anvio.A('max-geometric-homogeneity-index'), **anvio.K('max-geometric-homogeneity-index'))
+    groupD.add_argument(*anvio.A('min-combined-homogeneity-index'), **anvio.K('min-combined-homogeneity-index'))
+    groupD.add_argument(*anvio.A('max-combined-homogeneity-index'), **anvio.K('max-combined-homogeneity-index'))
     groupD.add_argument(*anvio.A('add-into-items-additional-data-table'), **anvio.K('add-into-items-additional-data-table'))
 
     groupE = parser.add_argument_group('OTHER STUFF', "Yes. Stuff that are not like the ones above.")

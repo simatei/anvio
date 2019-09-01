@@ -10,6 +10,7 @@ import itertools
 import subprocess
 
 import anvio
+import anvio.tests
 import anvio.filesnpaths as filesnpaths
 
 from anvio.errors import FilesNPathsError, ConfigError
@@ -22,12 +23,14 @@ __license__ = "GPL 3.0"
 __version__ = anvio.__version__
 __maintainer__ = "A. Murat Eren"
 __email__ = "a.murat.eren@gmail.com"
+__description__ = "A script for anvi'o to test itself"
 
 
 tests = {'mini': ['run_mini_test.sh'],
          'full': ['run_all_tests.sh', 'run_pangenome_tests.sh'],
          'pangenomics': ['run_pangenome_tests.sh'],
-         'alons-classifier': ['run_alons_classifier_tests.sh']}
+         'alons-classifier': ['run_alons_classifier_tests.sh'],
+         'manual-interface': ['run_manual_interactive.sh']}
 
 
 def __catch_sig(signum, frame):
@@ -42,7 +45,7 @@ def main(args):
         raise ConfigError("Well, the test suite '%s' is not something anvi'o knows about :/ Here is a list\
                             of tests available if you would like to try again: %s" % (args.suite, ', '.join(list(tests.keys()))))
 
-    tests_dir_path = os.path.abspath(os.path.join(os.path.dirname(anvio.__file__), '../tests'))
+    tests_dir_path = os.path.dirname(anvio.tests.__file__)
 
     test_files_found = [os.path.basename(p) for p in glob.glob(os.path.join(tests_dir_path, '*.sh'))]
 
@@ -78,7 +81,7 @@ def main(args):
 
 if __name__ == '__main__':
     import argparse
-    parser = argparse.ArgumentParser(description="A script for anvi'o to test itself")
+    parser = argparse.ArgumentParser(description=__description__)
 
     parser.add_argument('--suite', default='full',
                         help="Suite of tests to execute. By default this program will execute a full suite of example anvi'o\

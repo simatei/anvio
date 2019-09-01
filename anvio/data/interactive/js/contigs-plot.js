@@ -1,11 +1,10 @@
 function draw_n_values_plot(container, stats) {
     var svg = d3.select(container)
         .append('svg')
-        .attr('viewBox', '0 50 800 220')
-        .attr('class', 'svgviewbox_big');
+        .attr('viewBox', '0 50 800 260')
 
     var g = svg.append("g")
-        .attr("transform", "translate(0, 60)");
+        .attr("transform", "translate(0, 100)");
 
     var plot_width = 780;
     var plot_height = 180;
@@ -55,10 +54,10 @@ function draw_n_values_plot(container, stats) {
                                                 .attr('font-size', '12px');
 
                             tooltip_text.append('tspan')
-                                            .text('N' + (i+1) + ': ' + d.num_contigs + ' contigs');
+                                            .text('L' + (i+1) + ': ' + d.num_contigs + ' contigs');
 
                             tooltip_text.append('tspan')
-                                            .text('L' + (i+1) + ': ' + getCommafiedNumberString(d.length) + ' nts')
+                                            .text('N' + (i+1) + ': ' + getCommafiedNumberString(d.length) + ' nts')
                                             .attr('x', '10')
                                             .attr('dy', '1.4em');
 
@@ -81,19 +80,19 @@ function draw_n_values_plot(container, stats) {
             .attr("height", function(d) { return plot_height - yscale(d.length); });
 
     g.append('text')
-            .text('N50')
+            .text('L50')
             .style("font-size", '9.5')
             .attr("x", xscale(49) - 2)
             .attr("y", yscale(0) + 10);
 
     g.append('text')
-            .text('N0')
+            .text('L0')
             .style("font-size", '9.5')
             .attr("x", xscale(0) - 2)
             .attr("y", yscale(0) + 10);
 
     g.append('text')
-            .text('N100')
+            .text('L100')
             .style("font-size", '9.5')
             .attr("x", xscale(99) - 2)
             .attr("y", yscale(0) + 10);
@@ -114,11 +113,10 @@ function draw_n_values_plot(container, stats) {
 function draw_gene_counts_chart(container, gene_counts) {
         var svg = d3.select(container)
             .append('svg')
-            .attr('viewBox', '0 20 800 240')
-            .attr('class', 'svgviewbox_small');
+            .attr('viewBox', '0 20 800 300')
 
         var g = svg.append("g")
-            .attr("transform", "translate(0, 60)");
+            .attr("transform", "translate(0, 100)");
 
         var plot_width = 780;
         var plot_height = 180;

@@ -18,13 +18,14 @@ __email__ = "a.murat.eren@gmail.com"
 __tags__ = ["metagenomics", "profile_db", "contigs_db", "bam", "variability", "clustering"]
 __resources__ = [("The usage of the profiler in metagenomics workflow", "http://merenlab.org/2016/06/22/anvio-tutorial-v2/#anvi-profile")]
 __requires__ = ['bam-file', 'contigs-db']
-__provides__ = ['single-profile-db']
+__provides__ = ['single-profile-db', 'misc-data-item-orders']
+__description__ = "Creates a profile database. Main entry point for Post-Assembly Metagenomics Pipeline."
 
 
 if __name__ == '__main__':
     import argparse
 
-    parser = argparse.ArgumentParser(description='Main entry point for Post-Assembly Metagenomics Pipeline')
+    parser = argparse.ArgumentParser(description=__description__)
 
     groupI = parser.add_argument_group('INPUTS', 'There are two possible inputs for anvio profiler. You must\
                                                   to declare either of these two.')
@@ -53,6 +54,7 @@ if __name__ == '__main__':
     groupM.add_argument(*anvio.A('skip-SNV-profiling'), **anvio.K('skip-SNV-profiling'))
     groupM.add_argument(*anvio.A('profile-SCVs'), **anvio.K('profile-SCVs'))
     groupM.add_argument(*anvio.A('description'), **anvio.K('description'))
+    groupM.add_argument(*anvio.A('ignore-orphans'), **anvio.K('ignore-orphans'))
     groupX.add_argument(*anvio.A('cluster-contigs'), **anvio.K('cluster-contigs'))
     groupX.add_argument(*anvio.A('skip-hierarchical-clustering'), **anvio.K('skip-hierarchical-clustering'))
     groupX.add_argument(*anvio.A('distance'), **anvio.K('distance', {'help':
@@ -71,6 +73,7 @@ if __name__ == '__main__':
     groupZ.add_argument(*anvio.A('num-threads'), **anvio.K('num-threads'))
     groupZ.add_argument(*anvio.A('queue-size'), **anvio.K('queue-size'))
     groupZ.add_argument(*anvio.A('write-buffer-size'), **anvio.K('write-buffer-size'))
+    groupZ.add_argument(*anvio.A('max-coverage-depth'), **anvio.K('max-coverage-depth'))
 
     args = anvio.get_args(parser)
 

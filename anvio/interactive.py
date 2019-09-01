@@ -29,7 +29,7 @@ from anvio.dbops import ProfileSuperclass, ContigsSuperclass, PanSuperclass, Tab
 from anvio.dbops import get_description_in_db
 from anvio.dbops import get_default_item_order_name
 from anvio.completeness import Completeness
-from anvio.errors import ConfigError, RefineError
+from anvio.errors import ConfigError, RefineError, GenesDBError
 from anvio.variabilityops import VariabilitySuper
 from anvio.variabilityops import variability_engines
 
@@ -87,6 +87,7 @@ class Interactive(ProfileSuperclass, PanSuperclass, ContigsSuperclass):
         self.show_states = A('show_states')
         self.skip_check_names = A('skip_check_names')
         self.list_collections = A('list_collections')
+        self.load_full_state = A('load_full_state')
         self.distance = A('distance') or constants.distance_metric_default
         self.linkage = A('linkage') or constants.linkage_method_default
         self.skip_init_functions = A('skip_init_functions')
@@ -95,26 +96,40 @@ class Interactive(ProfileSuperclass, PanSuperclass, ContigsSuperclass):
         self.bin_id = A('bin_id')
         self.collection_name = A('collection_name')
         self.gene_mode = A('gene_mode')
+        self.inspect_split_name = A('split_name')
+        self.skip_hierarchical_clustering = A('skip_hierarchical_clustering')
+
 
         if self.pan_db_path and self.profile_db_path:
             raise ConfigError("You can't set both a profile database and a pan database in arguments\
                                 you send to this class. What are you doing?")
+
+        if self.profile_db_path and filesnpaths.is_file_exists(self.profile_db_path, dont_raise=True):
+            utils.is_profile_db(self.profile_db_path)
 
         if self.additional_layers_path:
             filesnpaths.is_file_tab_delimited(self.additional_layers_path)
 
         if self.gene_mode:
             if self.collection_name is None or self.bin_id is None:
-                raise ConfigError("Gene view requires a collection and a bin to be specified. If you want to \
-                                    view all the genes in your profile database then you can use \
-                                    anvi-script-add-default-collection to create a default collection \
-                                    with all contigs.")
+                raise ConfigError("Gene view requires a collection and a bin to be specified. To SEE all collections and bins in\
+                                   your profile databse, you can use the program `anvi-show-collections-and-bins`. If you want to\
+                                   ADD a collection to your profile database, you can either use `anvi-import-collection` or\
+                                   `anvi-cluster-contigs` if appropriate, or you can go lazy and use the program\
+                                   `anvi-script-add-default-collection`, which would add a single collection that describes all contigs\
+                                   in your contigs database (in an ideal world you should use the last one only if you are working with\
+                                   a single genome).")
 
         if self.collection_name and (not self.gene_mode) and (self.bin_id or self.bin_ids_file_path) and self.mode != 'refine':
-            raise ConfigError("On the one hand you provide a collection name, signaling anvi'o that you wish to\
-                               run the interactive display in collection mode. But then you also provide a bin name\
-                               as if you wish to run the refinement interface. Are you sure you don't want to run\
-                               `anvi-refine` instead? That would really make things much less confusing here :(")
+            raise ConfigError("There is something confusing here. On the one hand you provide a collection name, telling\
+                               anvi'o that you wish to run the interactive display with a collection focus. It would have\
+                               been fine if you stopped there, because then anvi'o would have fired up in 'collection\
+                               mode'. But you *also* provided a bin name. Now that's another ball game. Well, maybe you\
+                               wish to display this bin in 'gene mode'. But for that, you would need to add the flag\
+                               `--gene-mode`. Or maybe you actually want to 'refine' this bin, but in that case you \
+                               would need to run the program `anvi-refine` instead of `anvi-interactive` with the same\
+                               list of parameters and flags. Either of these would have made things much less confusing\
+                               here :(")
 
         # make sure early on that both the distance and linkage is OK.
         clustering.is_distance_and_linkage_compatible(self.distance, self.linkage)
@@ -123,11 +138,20 @@ class Interactive(ProfileSuperclass, PanSuperclass, ContigsSuperclass):
         self.auxiliary_profile_data_available = False
 
         # get additional data for items and layers, and get layer orders data.
-        a_db_is_found = (os.path.exists(self.pan_db_path) if self.pan_db_path else False) or (os.path.exists(self.profile_db_path) if self.profile_db_path else False)
-        self.items_additional_data_keys, self.items_additional_data_dict = TableForItemAdditionalData(self.args).get() if a_db_is_found else ([], {})
-        self.layers_additional_data_keys, self.layers_additional_data_dict = TableForLayerAdditionalData(self.args).get_all() if a_db_is_found else ([], {})
+        try:
+            a_db_is_found = (os.path.exists(self.pan_db_path) if self.pan_db_path else False) or (os.path.exists(self.profile_db_path) if self.profile_db_path else False)
+            self.items_additional_data_keys, self.items_additional_data_dict = TableForItemAdditionalData(self.args).get() if a_db_is_found else ([], {})
+            self.layers_additional_data_keys, self.layers_additional_data_dict = TableForLayerAdditionalData(self.args).get_all() if a_db_is_found else ([], {})
+            self.layers_order_data_dict = TableForLayerOrders(self.args).get() if a_db_is_found else {}
+        except GenesDBError as e:
+            self.items_additional_data_keys, self.items_additional_data_dict = [], {}
+            self.layers_additional_data_keys, self.layers_additional_data_dict = [], {}
+            self.layers_order_data_dict = {}
 
-        self.layers_order_data_dict = TableForLayerOrders(self.args).get() if a_db_is_found else {}
+            run.warning("Most likely the misc data module is complaining about a missing genes database. If that's the case,\
+                         you can ignore it as this will sort itself out in a second (this is a workaround for a design\
+                         bottleneck sadface.png): %s" % e.clear_text(), header="EXCEPTION OMMITTED (BUT PROBABLY YOU'RE FINE)", lc='yellow')
+
         for group_name in self.layers_additional_data_keys:
             layer_orders = TableForLayerOrders(self.args).update_orders_dict_using_additional_data_dict({},
                 self.layers_additional_data_keys[group_name], self.layers_additional_data_dict[group_name]) if a_db_is_found else {}
@@ -187,6 +211,9 @@ class Interactive(ProfileSuperclass, PanSuperclass, ContigsSuperclass):
             self.load_collection_mode()
         elif self.mode == 'full':
             self.load_full_mode()
+        elif self.mode == 'inspect':
+            self.load_full_mode()
+            self.load_inspect_mode()
         else:
             raise ConfigError("The interactive class is called with a mode that no one knows anything \
                                about. '%s'... What kind of a mode is that anyway :/" % self.mode)
@@ -211,6 +238,7 @@ class Interactive(ProfileSuperclass, PanSuperclass, ContigsSuperclass):
 
         self.process_external_item_order()
         self.gen_alphabetical_orders_of_items()
+
         if not self.p_meta['default_item_order'] and len(self.p_meta['available_item_orders']):
             self.p_meta['default_item_order'] = self.p_meta['available_item_orders'][0]
 
@@ -238,22 +266,19 @@ class Interactive(ProfileSuperclass, PanSuperclass, ContigsSuperclass):
         if self.mode == 'manual':
             return
 
-        # we expect to have a default clustering to be set when the code makes it way here, but there is an exception
-        # to that (it is when the user provides an items order file). please pay attention:
-        if not self.p_meta['default_item_order']:
-            if self.item_order_path:
-                # this is a special situation where we are not in manual mode, but we don't have a default clustering.
-                # yet the user has an items order file. here we will set the displauyed items to be the items in the view
-                # data.
-                self.displayed_item_names_ordered = sorted(list(self.views.values())[0]['dict'].keys())
-                return
-            else:
-                raise ConfigError("Wow. Anvi'o has no idea how you managed to come here. Please send an e-mail to the first\
-                                   developer you find, they will definitely want to fix this one.")
+        if not self.p_meta['item_orders']:
+            raise ConfigError("Apologies :( The code managed to came all the way down here without any item\
+                               orders set for your project, which makes it impossible for\
+                               anvi'o intearctive interface to display anything :/ Please check warning\
+                               messages you may have on your screen.")
 
         # self.displayed_item_names_ordered is going to be the 'master' names list. everything else is going to
         # need to match these names:
-        default_item_order = self.p_meta['item_orders'][self.p_meta['default_item_order']]
+        if self.p_meta['default_item_order']:
+            default_item_order = self.p_meta['item_orders'][self.p_meta['default_item_order']]
+        else:
+            default_item_order = self.p_meta['item_orders'][self.p_meta['available_item_orders'][0]]
+
         if default_item_order['type'] == 'newick':
             self.displayed_item_names_ordered = utils.get_names_order_from_newick_tree(default_item_order['data'], reverse=True)
         elif default_item_order['type'] == 'basic':
@@ -269,13 +294,14 @@ class Interactive(ProfileSuperclass, PanSuperclass, ContigsSuperclass):
 
         if not self.p_meta['item_orders'] or not len([o for o in self.p_meta['item_orders'].values() if o['type'] == 'newick']):
             if self.p_meta['db_type'] == 'pan':
-                raise ConfigError("This pangenome (which you gracefully named as '%s') does not seem to have any hierarchical\
-                                   clustering of protein gene clusters in it. Maybe you skipped the clustering step, maybe\
-                                   anvi'o skipped it on your behalf because you had too many gene clusters or something. Regardless of\
-                                   who did what, you don't get to display your pangenome at this particular instance. In some\
-                                   cases using a parameter like `--min-occurrence 2`, which would reduce the number of gene clusters by\
-                                   removing singletons that appear in only one genome can help solve this issue. Sorry :/" \
-                                                            % (self.p_meta['project_name']))
+                self.run.warning("This pangenome (which you gracefully named as '%s') does not seem to have any hierarchical\
+                                  clustering of gene clusters it contains. Maybe you skipped the clustering step, maybe\
+                                  anvi'o skipped it on your behalf because you had too many gene clusters or something. Anvi'o\
+                                  will do its best to recover from this situation. But you will very likely not be able to see\
+                                  a hierarchical dendrogram in the resulting display even if everything goes alright.. In some\
+                                  cases using a parameter like `--min-occurrence 2`, which would reduce the number of gene clusters by\
+                                  removing singletons that appear in only one genome can help solve this issue and make your\
+                                  pangenome great again." % (self.p_meta['project_name']))
             else:
                 if self.item_order_path:
                     self.run.warning("This merged profile database does not seem to have any hierarchical clustering\
@@ -283,22 +309,24 @@ class Interactive(ProfileSuperclass, PanSuperclass, ContigsSuperclass):
                                       an items order file. So anvi'o will try to use that and display your data.")
                 else:
                     if self.p_meta['merged']:
-                        raise ConfigError("This merged profile database does not seem to have any hierarchical clustering\
-                                           of splits that is required by the interactive interface. It may have been generated\
-                                           by anvi-merge with the `--skip-hierarchical-clustering` flag, or hierarchical\
-                                           clustering step may have been skipped by anvi-merge because you had too many splits\
-                                           to get the clustering in a reasonable amount of time. Please read the help menu for\
-                                           anvi-merge, and/or refer to the tutorial: \
-                                           http://merenlab.org/2015/05/01/anvio-tutorial/#clustering-during-merging")
+                        self.run.warning("This merged profile database does not seem to have any hierarchical clustering\
+                                          of splits :/ It may be the case becasue it may have been generated by anvi-merge \
+                                          with the `--skip-hierarchical-clustering` flag, or hierarchical\
+                                          clustering step may have been skipped by anvi-merge because you had too many splits\
+                                          to get the clustering in a reasonable amount of time. Basically you will not see a\
+                                          clustering dendrogram in the center of your display. Please read the help menu for\
+                                          anvi-merge, and/or refer to the tutorial: \
+                                          http://merenlab.org/2015/05/01/anvio-tutorial/#clustering-during-merging")
                     else:
-                        raise ConfigError("This single profile database does not seem to have any hierarchical clustering\
-                                           that is required by the interactive interface. You must use `--cluster-contigs`\
-                                           flag for single profiles to access to this functionality. Please read the help\
-                                           menu for anvi-profile, and/or refer to the tutorial.")
+                        self.run.warning("This single profile database does not seem to have any hierarchical clustering\
+                                          that is required by the interactive interface. You must use `--cluster-contigs`\
+                                          flag for single profiles if you would like to see a hierarchical clustering \
+                                          dendrogram in the center of your display. Please read the help menu for \
+                                          anvi-profile, and/or refer to the tutorial.")
 
 
     def gen_orders_for_items_based_on_additional_layers_data(self):
-        if self.skip_auto_ordering:
+        if self.skip_auto_ordering or not self.items_additional_data_keys:
             return
 
         self.progress.new('Processing additional data to order items (to skip: --skip-auto-ordering)')
@@ -612,7 +640,7 @@ class Interactive(ProfileSuperclass, PanSuperclass, ContigsSuperclass):
                                'blank': True,
                                'merged': True,
                                'contigs_db_hash': None,
-                               'contigs_ordered': False,
+                               'items_ordered': False,
                                'samples': sample_id,
                                'sample_id': sample_id})
 
@@ -658,6 +686,19 @@ class Interactive(ProfileSuperclass, PanSuperclass, ContigsSuperclass):
         return clusterings
 
 
+    def load_inspect_mode(self):
+        self.displayed_item_names_ordered = sorted(self.views[self.default_view]['dict'].keys())
+        alphabetical_order = {'type': 'basic', 'data': sorted(self.displayed_item_names_ordered[::])}
+        self.p_meta['item_orders']['alphabetical'] = alphabetical_order
+        self.p_meta['available_item_orders'].append('alphabetical')
+
+        if not self.inspect_split_name or self.inspect_split_name not in self.displayed_item_names_ordered:
+            self.inspect_split_name = alphabetical_order['data'][0]
+            self.run.warning("Either you forgot to provide split name to inspect or the split name\
+                             you have provided does not exist. So anvi'o decided to show you the split: \
+                             %s" % self.inspect_split_name)
+
+
     def load_refine_mode(self):
         self.split_names_of_interest = set([])
         self.is_merged = self.p_meta['merged']
@@ -691,15 +732,26 @@ class Interactive(ProfileSuperclass, PanSuperclass, ContigsSuperclass):
         self.run.info('Number of bins', len(self.bins))
         self.run.info('Number of splits', len(self.split_names_of_interest))
 
-        item_orders = self.cluster_splits_of_interest()
-        default_clustering_class = constants.merged_default if self.is_merged else constants.single_default
+        if not self.skip_hierarchical_clustering:
+            item_orders = self.cluster_splits_of_interest()
+            default_clustering_class = constants.merged_default if self.is_merged else constants.single_default
 
-        default_item_order = dbops.get_default_item_order_name(default_clustering_class, item_orders)
+            default_item_order = dbops.get_default_item_order_name(default_clustering_class, item_orders)
+        else:
+            # even though we do not generate any hierarchical clustering,
+            # we need to clear these, otherwise full mode trees will appear.
+            item_orders = {}
+            default_item_order = None
 
         self.item_orders = item_orders
         self.p_meta['item_orders'] = item_orders
         self.p_meta['available_item_orders'] = list(self.item_orders.keys())
         self.p_meta['default_item_order'] = default_item_order
+        
+        self.add_user_tree()
+
+        if self.skip_hierarchical_clustering and not self.tree:
+            raise ConfigError("You wanted to skip hierarchical clustering but did not provided any newick file.")
 
         self.collections = ccollections.Collections()
         self.collections.populate_collections_dict(self.profile_db_path)
@@ -730,6 +782,7 @@ class Interactive(ProfileSuperclass, PanSuperclass, ContigsSuperclass):
             self.run.warning('HMMs for single-copy core genes were not run for this contigs database. So you will not\
                               see completion / redundancy estimates in the collection mode as additional layers. SAD.')
             completion_redundancy_available = False
+            self.hmm_access = None
         else:
             self.progress.new('Accessing HMM hits')
             self.progress.update('...')
@@ -785,7 +838,7 @@ class Interactive(ProfileSuperclass, PanSuperclass, ContigsSuperclass):
             # clustering is done, we can get prepared for the expansion of the view dict
             # with new layers. Note that these layers are going to be filled later.
             if completion_redundancy_available:
-                d['header'].extend(['percent_completion', 'percent_redundancy'])
+                d['header'].extend(['percent_completion', 'percent_redundancy', 'matching_domain'])
             d['header'].extend(['bin_name', 'source'])
 
             views_for_collection[view] = d
@@ -815,14 +868,17 @@ class Interactive(ProfileSuperclass, PanSuperclass, ContigsSuperclass):
 
             if completion_redundancy_available:
                 # get completeness estimate
-                p_completion, p_redundancy, domain, domain_confidence, results_dict = completeness.get_info_for_splits(set(self.collection[bin_id]))
+                p_completion, p_redundancy, domain, domain_probabilities, info_text, _ = completeness.get_info_for_splits(set(self.collection[bin_id]))
+                domain_confidence = domain_probabilities[domain] if domain else 0.0
 
             for view in self.views:
                 self.views[view]['dict'][bin_id]['bin_name'] = bin_id
 
                 if completion_redundancy_available:
+                    matching_domain, matching_domain_confidence = sorted(domain_probabilities.items(), key = lambda x: x[1], reverse=True)[0]
                     self.views[view]['dict'][bin_id]['percent_completion'] = p_completion
                     self.views[view]['dict'][bin_id]['percent_redundancy'] = p_redundancy
+                    self.views[view]['dict'][bin_id]['matching_domain'] = '%s (%.1f)' % (matching_domain, matching_domain_confidence)
 
                 self.views[view]['dict'][bin_id]['source'] = bins_info_dict[bin_id]['source']
 
@@ -997,7 +1053,10 @@ class Interactive(ProfileSuperclass, PanSuperclass, ContigsSuperclass):
         # the gene_level_coverage_stats_dict contains a mixture of data, some of which are not relevant to
         # our purpose of generating views for the interactive interface. here we explicitly list keys that
         # correspond to views we wish to generate:
-        views_of_interest = ['mean_coverage', 'detection', 'non_outlier_mean_coverage', 'non_outlier_coverage_std']
+        if self.inseq_stats:
+            views_of_interest = ['mean_coverage', 'insertions', 'insertions_normalized', 'mean_disruption', 'below_disruption']
+        else:
+            views_of_interest = ['mean_coverage', 'detection', 'non_outlier_mean_coverage', 'non_outlier_coverage_std']
 
         for view in views_of_interest:
             self.views[view] = {
@@ -1018,27 +1077,59 @@ class Interactive(ProfileSuperclass, PanSuperclass, ContigsSuperclass):
 
         self.init_split_sequences(self.p_meta['min_contig_length'], split_names_of_interest=split_names_of_interest)
 
+        gene_caller_ids_missing_in_gene_level_cov_stats_dict = set([])
+        gene_caller_sources_for_missing_gene_caller_ids_in_gene_level_cov_stats_dict = set([])
         for split_name in split_names_of_interest:
             genes_in_splits_entries = self.split_name_to_genes_in_splits_entry_ids[split_name]
 
             for genes_in_splits_entry in genes_in_splits_entries:
                 e = self.genes_in_splits[genes_in_splits_entry]
                 gene_callers_id = e['gene_callers_id']
+                gene_caller_source = self.genes_in_contigs_dict[gene_callers_id]['source']
+
+                if gene_callers_id not in self.gene_level_coverage_stats_dict:
+                    gene_caller_ids_missing_in_gene_level_cov_stats_dict.add(gene_callers_id)
+                    gene_caller_sources_for_missing_gene_caller_ids_in_gene_level_cov_stats_dict.add(gene_caller_source)
+                    continue
+
                 all_gene_callers_ids.append(gene_callers_id)
 
                 for view in views_of_interest:
                     self.views[view]['dict'][str(gene_callers_id)] = {}
                     for sample_name in self.gene_level_coverage_stats_dict[gene_callers_id]:
                         self.views[view]['dict'][str(gene_callers_id)][sample_name] = self.gene_level_coverage_stats_dict[gene_callers_id][sample_name][view]
+        if len(gene_caller_ids_missing_in_gene_level_cov_stats_dict):
+            self.run.warning("Anvi'o observed something weird while it was processing gene level coverage statistics.\
+                              Some of the gene calls stored in your contigs database (%d of them, precisely) did not\
+                              have any information in gene level coverage stats dictionary. It is likely they were added\
+                              to the contigs database *after* these gene level coverage stats were computed and stored.\
+                              One way to address this is to remove the database file for gene coverage stats and re-run\
+                              this step. Another way to do it is the good ol' way of ignoring these warnings as you usually\
+                              do. If you do the latter, you will probably be fine. But we wanted to keep you in the loop\
+                              just in case you are not fine and the code does not realize that yet. The sources for gene\
+                              calls that will not be included in your gene view include these ones: '%s'." % \
+                                    (len(gene_caller_ids_missing_in_gene_level_cov_stats_dict),
+                                     ', '.join(gene_caller_sources_for_missing_gene_caller_ids_in_gene_level_cov_stats_dict)))
 
-        self.states_table = TablesForStates(self.profile_db_path)
+        # this is a bit tricky. we already populated the collections dict above, but it was to find out
+        # genes caller ids of interest. we are now resetting the collections dict, and populating it
+        # from scratch from the genes database. similarly, in store collection operations in bottleroutes
+        # and elsewhere will target the gene database tables for gene mode.
+        self.collections = ccollections.Collections()
+        self.collections.populate_collections_dict(self.genes_db_path)
 
-        self.p_meta['default_item_order'] = 'mean_coverage'
-        self.default_view = 'mean_coverage'
+        # here we set the states table to the genes database to make sure the information from the interface
+        # goes into the right table
+        self.states_table = TablesForStates(self.genes_db_path)
 
-        self.p_meta['available_item_orders'] = []
-        self.p_meta['item_orders'] = {}
+        # dealing with item ordes in the genes database
+        self.p_meta['available_item_orders'], self.p_meta['item_orders'] = dbops.get_item_orders_from_db(self.genes_db_path)
 
+        # FIXME: These clustering data should be stored in the genes database :/ what is here is from the ad hoc
+        #        attempt to run things in gene mode before we had the genes database, and we can do better than this
+        #        now. But for that we also need to remove the 'gene_level_coverage_stats' table, and instead sotre
+        #        these information into view tables. both pan and profile databases are nicely following that design,
+        #        and there is no need to make genes database so different.
         for view in views_of_interest:
             item_order_name = view
             newick_tree_text = clustering.get_newick_tree_data_for_dict(self.views[view]['dict'],
@@ -1050,7 +1141,9 @@ class Interactive(ProfileSuperclass, PanSuperclass, ContigsSuperclass):
 
         self.p_meta['item_orders']['synteny'] = {'type': 'basic', 'data': list(map(str, sorted(all_gene_callers_ids)))}
 
-        self.title = "Genes in '%s'" % self.bin_id
+        self.p_meta['default_item_order'] = 'mean_coverage'
+        self.default_view = 'mean_coverage'
+        self.title = "Genes in '%s' [mode: %s]" % (self.bin_id, 'IN-Seq/Tn-Seq' if self.inseq_stats else 'Standard')
 
         # FIXME: When we are in gene-mode mode, our item names are no longer split names, hence the
         # following dictionaries are useless. Until we find a better way to fill them up with
@@ -1059,11 +1152,6 @@ class Interactive(ProfileSuperclass, PanSuperclass, ContigsSuperclass):
         self.splits_basic_info = {}
         self.splits_taxonomy_dict = {}
         self.p_meta['description'] = 'None'
-
-        # FIX ME: storing collection and states is not available for gene mode atm.
-        self.args.read_only = True
-
-        self.items_additional_data_keys, self.items_additional_data_dict = [], {}
 
         for view in views_of_interest:
             # don't bother if this is a single profile
@@ -1098,10 +1186,13 @@ class Interactive(ProfileSuperclass, PanSuperclass, ContigsSuperclass):
         search_terms = [s.strip() for s in search_terms.split(',')]
         full_report = None
 
-        if self.mode == 'full' or self.mode == 'gene':
+        if self.mode == 'full' or self.mode == 'gene' or self.mode == 'refine':
             items, full_report = ContigsSuperclass.search_for_gene_functions(self, search_terms, verbose=False, requested_sources=requested_sources)
-            if self.mode == 'gene':
+            if self.mode == 'gene' or self.mode == 'refine':
                 # otherwise gene mode report functions from other splits are not the bin interactive initialized.
+                for item in items:
+                    items[item] = [i for i in items[item] if i in self.split_names_of_interest]
+
                 full_report = [i for i in full_report if i[5] in self.split_names_of_interest]
         elif self.mode == 'pan':
             items, full_report = PanSuperclass.search_for_gene_functions(self, search_terms, verbose=False, requested_sources=requested_sources)
@@ -1189,25 +1280,25 @@ class Interactive(ProfileSuperclass, PanSuperclass, ContigsSuperclass):
             # (1) set the header line with the first entry:
             json_header = ['contigs']
 
-            # (2) add taxonomy, if exitsts:
-            if len(self.splits_taxonomy_dict):
-                json_header.extend(['taxonomy'])
-
-            # (3) then add length and GC content IF we have sequences available
+            # (2) then add length and GC content IF we have sequences available
             if self.splits_basic_info:
                 basic_info_headers = ['length', 'gc_content']
                 json_header.extend(basic_info_headers)
 
-            # (4) then add the view!
+            # (3) then add the view!
             json_header.extend(view_headers)
 
-            # (5) then add 'additional' headers as the outer ring:
+            # (4) then add 'additional' headers as the outer ring:
             if self.items_additional_data_keys:
                 json_header.extend(self.items_additional_data_keys)
 
-            # (6) finally add hmm search results
+            # (5) finally add hmm search results
             if self.hmm_searches_dict:
                 json_header.extend([tpl[0] for tpl in self.hmm_searches_header])
+
+            # (6) add taxonomy, if exitsts:
+            if len(self.splits_taxonomy_dict):
+                json_header.extend(['taxonomy'])
 
             # (7) and finalize it (yay):
             json_object.append(json_header)
@@ -1217,28 +1308,29 @@ class Interactive(ProfileSuperclass, PanSuperclass, ContigsSuperclass):
                 json_entry = [split_name]
 
                 # (2)
-                if self.splits_taxonomy_dict:
-                    if split_name in self.splits_taxonomy_dict:
-                        json_entry.extend([self.splits_taxonomy_dict[split_name]])
-                    else:
-                        json_entry.extend([None])
-
-                # (3)
                 if self.splits_basic_info:
                     json_entry.extend([self.splits_basic_info[split_name][header] for header in basic_info_headers])
 
-                # (4) adding essential data for the view
+                # (3) adding essential data for the view
                 json_entry.extend([view_dict[split_name][header] for header in view_headers])
 
-                # (5) adding additional layers
-                json_entry.extend([self.items_additional_data_dict[split_name][header] if split_name in self.items_additional_data_dict else None for header in self.items_additional_data_keys])
+                # (4) adding additional layers
+                if self.items_additional_data_dict:
+                    json_entry.extend([self.items_additional_data_dict[split_name][header] if split_name in self.items_additional_data_dict else None for header in self.items_additional_data_keys])
 
-                # (6) adding hmm stuff
+                # (5) adding hmm stuff
                 if self.hmm_searches_dict:
                     if self.split_hmm_layers:
                         json_entry.extend([self.hmm_searches_dict[split_name][header] if split_name in self.hmm_searches_dict else None for header in [tpl[0] for tpl in self.hmm_searches_header]])
                     else:
                         json_entry.extend([len(self.hmm_searches_dict[split_name][header]) if split_name in self.hmm_searches_dict else 0 for header in [tpl[1] for tpl in self.hmm_searches_header]])
+
+                # (6)
+                if self.splits_taxonomy_dict:
+                    if split_name in self.splits_taxonomy_dict:
+                        json_entry.extend([self.splits_taxonomy_dict[split_name]])
+                    else:
+                        json_entry.extend([None])
 
                 # (7) send it along!
                 json_object.append(json_entry)
@@ -1270,10 +1362,11 @@ class Interactive(ProfileSuperclass, PanSuperclass, ContigsSuperclass):
                                                               ', '.join(bad_bin_names)
                                                              ))
 
+        collections = TablesForCollections(self.profile_db_path)
+
         # remove bins that should be updated in the database:
         for bin_id in self.ids_for_already_refined_bins:
-            collection_dict.pop(bin_id)
-            bins_info_dict.pop(bin_id)
+            collections.delete_bin(self.collection_name, bin_id)
 
         # zero it out
         self.ids_for_already_refined_bins = set([])
@@ -1288,18 +1381,14 @@ class Interactive(ProfileSuperclass, PanSuperclass, ContigsSuperclass):
             run.info_single('')
 
         for bin_id in refined_bin_data:
-            collection_dict[bin_id] = refined_bin_data[bin_id]
-            bins_info_dict[bin_id] = refined_bins_info_dict[bin_id]
             self.ids_for_already_refined_bins.add(bin_id)
-
 
         if anvio.DEBUG:
             run.info('resulting collection', collection_dict)
             run.info('resulting bins info', bins_info_dict)
             run.info_single('')
 
-        collections = TablesForCollections(self.profile_db_path)
-        collections.append(self.collection_name, collection_dict, bins_info_dict)
+        collections.append(self.collection_name, refined_bin_data, refined_bins_info_dict, drop_collection=False)
 
         run.info_single('"%s" collection is updated!' % self.collection_name)
 
@@ -1740,6 +1829,9 @@ class StructureInteractive(VariabilitySuper):
         if available_gene_caller_ids is "" and available_genes_path is "":
             available_gene_caller_ids = self.available_gene_caller_ids
             available_genes_path = self.available_genes_path
+
+        if available_gene_caller_ids:
+            available_gene_caller_ids = [int(gene) for gene in available_gene_caller_ids.split(',')]
 
         # method inherited from VariabilitySuper
         requested_available_genes = self.get_genes_of_interest(available_genes_path, available_gene_caller_ids)
@@ -2186,12 +2278,12 @@ class ContigsInteractive():
         n_values = [c['n_values'] for c in self.contigs_stats.values()]
         N = lambda n: [n_value[n]['num_contigs'] for n_value in n_values]
         L = lambda n: [n_value[n]['length'] for n_value in n_values]
-        basic_stats.append(['N50'] + N(49))
-        basic_stats.append(['N75'] + N(74))
-        basic_stats.append(['N90'] + N(89))
-        basic_stats.append(['L50'] + L(49))
-        basic_stats.append(['L75'] + L(74))
-        basic_stats.append(['L90'] + L(89))
+        basic_stats.append(['L50'] + N(49))
+        basic_stats.append(['L75'] + N(74))
+        basic_stats.append(['L90'] + N(89))
+        basic_stats.append(['N50'] + L(49))
+        basic_stats.append(['N75'] + L(74))
+        basic_stats.append(['N90'] + L(89))
 
         self.tables['basic_stats'] = basic_stats
         self.human_readable_keys.extend([e[0] for e in basic_stats])

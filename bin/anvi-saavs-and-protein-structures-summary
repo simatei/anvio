@@ -18,6 +18,8 @@ __license__ = "GPL 3.0"
 __version__ = anvio.__version__
 __maintainer__ = "A. Murat Eren"
 __email__ = "a.murat.eren@gmail.com"
+__status__ = "Deprecated"
+__description__ = "Generate a static web site for SAAVs and protein structures."
 
 
 run = terminal.Run()
@@ -32,7 +34,7 @@ def main(args):
 if __name__ == '__main__':
     import argparse
 
-    parser = argparse.ArgumentParser(description="Generate a static web site for SAAVs and protein structures.")
+    parser = argparse.ArgumentParser(description=__description__)
 
     groupA = parser.add_argument_group("CONTIGS DB", "If you provide a contigs database, anvi'o will findout about\
                                         functions and other properties of genes using the contigs database. This is\
@@ -44,8 +46,9 @@ if __name__ == '__main__':
                                         samples you have from the input data directory. If you want to overwrite that\
                                         information (i.e. to work with a smaller set of genes or samples), you can\
                                         come up with your own files.")
-    groupB.add_argument('--genes', type=str, help="Genes file.")
-    groupB.add_argument('--samples', type=str, help="Samples file.")
+    groupB.add_argument('--genes', type=str, help="Genes file.", metavar="FILE")
+    groupB.add_argument('--samples', type=str, help="Samples file.", metavar="FILE")
+
 
     groupC = parser.add_argument_group('INPUT/OUTPUT', "Read from here, write to there.")
     groupC.add_argument(*anvio.A('input-dir'), **anvio.K('input-dir', {'required': True}))

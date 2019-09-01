@@ -64,8 +64,8 @@ class Pangenome(object):
         self.output_dir = A('output_dir')
         self.num_threads = A('num_threads')
         self.skip_alignments = A('skip_alignments')
-        self.skip_homogeneity = self.args.skip_homogeneity
-        self.quick_homogeneity = self.args.quick_homogeneity
+        self.skip_homogeneity = A('skip_homogeneity')
+        self.quick_homogeneity = A('quick_homogeneity')
         self.align_with = A('align_with')
         self.overwrite_output_destinations = A('overwrite_output_destinations')
         self.debug = anvio.DEBUG
@@ -136,7 +136,7 @@ class Pangenome(object):
                        'gene_alignments_computed': False if self.skip_alignments else True,
                        'genomes_storage_hash': self.genomes_storage.get_storage_hash(),
                        'project_name': self.project_name,
-                       'gene_clusters_clustered': False,
+                       'items_ordered': False,
                        'description': self.description if self.description else '_No description is provided_',
                       }
 
@@ -400,6 +400,10 @@ class Pangenome(object):
 
         gene_clusters = list(gene_clusters_dict.keys())
 
+        for genome_name in self.genomes:
+            self.genomes[genome_name]['singleton_gene_clusters'] = 0
+            self.genomes[genome_name]['num_gene_clusters_raw'] = 0
+
         for gene_cluster in gene_clusters:
             self.view_data[gene_cluster] = dict([(genome_name, 0) for genome_name in self.genomes])
             self.view_data_presence_absence[gene_cluster] = dict([(genome_name, 0) for genome_name in self.genomes])
@@ -411,6 +415,12 @@ class Pangenome(object):
                 self.view_data[gene_cluster][genome_name] += 1
                 self.view_data_presence_absence[gene_cluster][genome_name] = 1
                 self.additional_view_data[gene_cluster]['num_genes_in_gene_cluster'] += 1
+                self.genomes[genome_name]['num_gene_clusters_raw'] += 1
+
+            genomes_contributing_to_gene_cluster = [t[0] for t in self.view_data_presence_absence[gene_cluster].items() if t[1]]
+
+            if len(genomes_contributing_to_gene_cluster) == 1:
+                self.genomes[genomes_contributing_to_gene_cluster[0]]['singleton_gene_clusters'] += 1
 
             self.additional_view_data[gene_cluster]['SCG'] = 1 if set(self.view_data[gene_cluster].values()) == set([1]) else 0
             self.additional_view_data[gene_cluster]['max_num_paralogs'] = max(self.view_data[gene_cluster].values())
@@ -418,7 +428,6 @@ class Pangenome(object):
             self.additional_view_data[gene_cluster]['num_genomes_gene_cluster_has_hits'] = len([True for genome in self.view_data[gene_cluster] if self.view_data[gene_cluster][genome] > 0])
 
         self.progress.end()
-
         ########################################################################################
         #                           FILTERING BASED ON OCCURRENCE
         ########################################################################################
@@ -582,8 +591,8 @@ class Pangenome(object):
         if self.skip_homogeneity:
             self.run.warning("Skipping homogeneity calculations per the '--skip-homogeneity' flag.")
             return
-        
-        pan = dbops.PanSuperclass(args=self.args)
+
+        pan = dbops.PanSuperclass(args=self.args, r=self.run, p=self.progress)
         gene_cluster_names = set(list(gene_clusters_dict.keys()))
 
         d = pan.compute_homogeneity_indices_for_gene_clusters(gene_cluster_names=gene_cluster_names, num_threads=self.num_threads)
@@ -593,7 +602,7 @@ class Pangenome(object):
                               without updating anything in the pan database...")
             return
 
-        miscdata.TableForItemAdditionalData(self.args).add(d, ['functional_homogeneity_index', 'geometric_homogeneity_index'], skip_check_names=True)
+        miscdata.TableForItemAdditionalData(self.args).add(d, ['functional_homogeneity_index', 'geometric_homogeneity_index', 'combined_homogeneity_index'], skip_check_names=True)
 
 
     def populate_layers_additional_data_and_orders(self):
@@ -615,7 +624,11 @@ class Pangenome(object):
             if h in list(self.genomes.values())[0]:
                 layers_additional_data_keys.append(h)
 
-        layers_additional_data_keys.extend(['num_genes', 'avg_gene_length', 'num_genes_per_kb'])
+        layers_additional_data_keys.extend(['num_genes', 'avg_gene_length', 'num_genes_per_kb',
+                                            'singleton_gene_clusters'])
+
+        if self.gene_cluster_min_occurrence > 1:
+            layers_additional_data_keys.extend(['num_gene_clusters_raw'])
 
         for genome_name in self.genomes:
             new_dict = {}
@@ -625,17 +638,10 @@ class Pangenome(object):
             layers_additional_data_dict[genome_name] = new_dict
 
         # summarize gene cluster stats across genomes
-        layers_additional_data_keys.extend(['num_gene_clusters', 'singleton_gene_clusters'])
+        layers_additional_data_keys.extend(['num_gene_clusters'])
         for genome_name in self.genomes:
             layers_additional_data_dict[genome_name]['num_gene_clusters'] = 0
-            layers_additional_data_dict[genome_name]['singleton_gene_clusters'] = 0
             for gene_cluster in self.view_data_presence_absence:
-                genomes_contributing_to_gene_cluster = [t[0] for t in self.view_data_presence_absence[gene_cluster].items() if t[1]]
-
-                # tracking singletons
-                if len(genomes_contributing_to_gene_cluster) == 1 and genomes_contributing_to_gene_cluster[0] == genome_name:
-                    layers_additional_data_dict[genome_name]['singleton_gene_clusters'] += 1
-
                 # tracking the total number of gene clusters
                 if self.view_data_presence_absence[gene_cluster][genome_name]:
                     layers_additional_data_dict[genome_name]['num_gene_clusters'] += 1
@@ -733,13 +739,14 @@ class Pangenome(object):
         # done in the `alignment_worker` down below)
         aligners.select(self.align_with)
 
-        self.progress.new('Aligning amino acid sequences for genes in gene clusters')
-        self.progress.update('...')
         gene_cluster_names = list(gene_clusters_dict.keys())
 
         # we only need to align gene clusters with more than one sequence
         non_singleton_gene_cluster_names = [g for g in gene_cluster_names if len(gene_clusters_dict[g]) > 1]
         num_non_singleton_gene_clusters = len(non_singleton_gene_cluster_names)
+
+        self.progress.new('Aligning amino acid sequences for genes in gene clusters', progress_total_items=num_non_singleton_gene_clusters)
+        self.progress.update('...')
 
         manager = multiprocessing.Manager()
         input_queue = manager.Queue()
@@ -770,6 +777,7 @@ class Pangenome(object):
                     print(json.dumps(gene_clusters_item, indent=2))
 
                 received_gene_clusters += 1
+                self.progress.increment()
                 self.progress.update("Processed %d of %d non-singleton GCs in %d threads." %
                     (received_gene_clusters, num_non_singleton_gene_clusters, self.num_threads))
 
@@ -841,7 +849,7 @@ class Pangenome(object):
                                   anvi'o will generate a FASTA file in a temporary directory with the contents of the\
                                   gene cluster, and will not attempt to delete them later)."
 
-                run.warning("VERY BAD NEWS. The alignment of seqeunces with '%s' in the gene cluster '%s' failed\
+                run.warning("VERY BAD NEWS. The alignment of sequences with '%s' in the gene cluster '%s' failed\
                              for some reason. Since the real answer to 'why' is too deep in the matrix, there is\
                              no reliable solution for anvi'o to find it for you, BUT THIS WILL AFFECT YOUR SCIENCE\
                              GOING FORWARD, SO YOU SHOULD CONSIDER ADDRESSING THIS ISSUE FIRST. %s" % \
@@ -911,7 +919,7 @@ class Pangenome(object):
 
         # work with gene cluster homogeneity index
         self.populate_gene_cluster_homogeneity_index(gene_clusters_dict)
-        
+
         # done
         self.run.info('log file', self.run.log_file_path)
         self.run.quit()

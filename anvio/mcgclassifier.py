@@ -70,9 +70,6 @@ class MetagenomeCentricGeneClassifier:
         self.coverage_values_per_nt = None
         self.gene_coverages = {}
         self.gene_detections = None
-        self.gene_coverage_values_per_nt = {}
-        self.gene_non_outlier_coverage_std = None
-        self.gene_non_outlier_positions = {}
         self.samples = None
         self.positive_samples = []
         self.number_of_positive_samples = None
@@ -82,7 +79,6 @@ class MetagenomeCentricGeneClassifier:
         self.samples_detection_information = {}
         self.gene_presence_absence_in_samples_initiated = False
         self.gene_presence_absence_in_samples = None
-        self.gene_coverages_filtered = {}
         self.additional_description = ''
         self.total_length = None
         self.samples_coverage_stats_dicts_was_initiated = False
@@ -125,9 +121,21 @@ class MetagenomeCentricGeneClassifier:
             raise ConfigError("MCGC needs at least one of the following in order to work: \
                                 gene_level_coverage_stats_dict or/and split_coverage_values_per_nt_dict")
 
+        # We want to make sure these are empty in case we use "init" multiple times for different bins
+        self.coverage_values_per_nt = None
+        self.gene_class_df = {}
+        self.samples_detection_information = {}
+        self.gene_presence_absence_in_samples_initiated = False
+        self.gene_presence_absence_in_samples = None
+        self.samples_coverage_stats_dicts_was_initiated = False
+        self.samples_coverage_stats_dicts = {}
+        self.non_outlier_indices = {}
+        self.gene_coverage_consistency_dict = {}
+        self.gene_coverage_consistency_dict_initiated = False
+
         self.gene_level_coverage_stats_dict = gene_level_coverage_stats_dict
         self.split_coverage_values_per_nt_dict = split_coverage_values_per_nt_dict
-        if self.additional_description:
+        if additional_description:
             self.additional_description = '-' + additional_description
 
         try:

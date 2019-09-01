@@ -31,11 +31,13 @@ pp = terminal.pretty_print
 
 
 class TablesForGeneCalls(Table):
-    def __init__(self, db_path, contigs_fasta=None, run=terminal.Run(), progress=terminal.Progress(), debug=False):
+    def __init__(self, db_path, contigs_fasta=None, args=None, run=terminal.Run(), progress=terminal.Progress(), debug=False):
         self.run = run
         self.progress = progress
+
         self.db_path = db_path
         self.contigs_fasta = contigs_fasta
+        self.args = args
         self.debug = debug
 
         utils.is_contigs_db(self.db_path)
@@ -68,7 +70,7 @@ class TablesForGeneCalls(Table):
                                 should be multiply of 3. It is not the case for all, which is a deal breaker.")
 
 
-    def use_external_gene_calls_to_populate_genes_in_contigs_table(self, input_file_path, gene_calls_dict=None, ignore_internal_stop_codons=False):
+    def use_external_gene_calls_to_populate_genes_in_contigs_table(self, input_file_path, gene_calls_dict=None, ignore_internal_stop_codons=False, skip_amino_acid_sequences=False):
         """Add genes to the contigs database.
 
            Either provide an `input_file_path` for external gene calls, or provide an
@@ -96,6 +98,10 @@ class TablesForGeneCalls(Table):
             need to make sure gene caller ids in your dict does not overlap with the ones in
             the database.
 
+            By default this function will also attempt to add translated DNA sequences into the
+            corresponding table per gene call. Unless the `skip_amino_acid_sequences` flag is
+            True. This may be useful if genes that are not translated are being added, such as
+            ribosomal RNA genes, etc.
         """
 
         # by default we assume that this is a pristine run. but if the user sends a dictionary
@@ -154,11 +160,28 @@ class TablesForGeneCalls(Table):
             #            contigs_db.disconnect()
             append_to_the_db = True
 
-        # recover amino acid sequences. during this operation we are going to have to read all contig sequences
-        # into the damn memory. anvi'o is doing a pretty bad job with memory management :(
+        # recover amino acid sequences or create a blank dictionary
+        if skip_amino_acid_sequences:
+            amino_acid_sequences = dict([(g, '') for g in gene_calls_dict])
+        else:
+            amino_acid_sequences = self.get_amino_acid_sequences_for_genes_in_gene_calls_dict(gene_calls_dict, ignore_internal_stop_codons=ignore_internal_stop_codons)
+
+        # populate genes_in_contigs, and gene_amino_acid_sequences table in contigs db.
+        self.populate_genes_in_contigs_table(gene_calls_dict, amino_acid_sequences, append_to_the_db=append_to_the_db)
+
+
+    def get_amino_acid_sequences_for_genes_in_gene_calls_dict(self, gene_calls_dict, ignore_internal_stop_codons=False):
+        '''Recover amino acid sequences for gene calls in a gene_calls_dict.
+
+           During this operation we are going to have to read all contig sequences
+           into the damn memory. anvi'o is doing a pretty bad job with memory management :(
+        '''
+
         amino_acid_sequences = {}
 
+        # FIXME: this is a very poor practice for memory management:
         contig_sequences = {}
+
         if self.contigs_fasta:
             fasta = u.SequenceSource(self.contigs_fasta)
             while next(fasta):
@@ -198,7 +221,7 @@ class TablesForGeneCalls(Table):
                     num_genes_with_internal_stops += 1
                 else:
                     os.remove(self.db_path)
-                    raise ConfigError("Oops. Anvi'o run into an amino acid seqeunce (that corresponds to the gene callers id '%s')\
+                    raise ConfigError("Oops. Anvi'o run into an amino acid sequence (that corresponds to the gene callers id '%s')\
                                        which had an internal stop codon :/ This usually indicates that your external gene calls\
                                        have problems. If you still want to continue, you can ask anvi'o to ignore internal stop\
                                        codons on your own risk. It will probably look very ugly on your screen, but here is the\
@@ -206,9 +229,6 @@ class TablesForGeneCalls(Table):
                                        anvi'o does not trust you either): %s" % (str(gene_callers_id), sequence))
 
             amino_acid_sequences[gene_callers_id] = amino_acid_sequence
-
-        # populate genes_in_contigs, and gene_amino_acid_sequences table in contigs db.
-        self.populate_genes_in_contigs_table(gene_calls_dict, amino_acid_sequences, append_to_the_db=append_to_the_db)
 
         if num_genes_with_internal_stops:
             percent_genes_with_internal_stops = num_genes_with_internal_stops * 100.0 / len(gene_calls_dict)
@@ -221,6 +241,8 @@ class TablesForGeneCalls(Table):
         if number_of_impartial_gene_calls:
             self.run.warning('%d of your %d gene calls were impartial, hence the translated amino acid sequences for those\
                               were not stored in the database.' % (number_of_impartial_gene_calls, len(gene_calls_dict)))
+
+        return amino_acid_sequences
 
 
     def call_genes_and_populate_genes_in_contigs_table(self, gene_caller='prodigal'):
@@ -248,7 +270,7 @@ class TablesForGeneCalls(Table):
             self.run.info_single('--debug flag is [ON], which means temporary directories generated by\
                                  this run will not be removed', nl_after=2)
 
-        gene_caller = genecalling.GeneCaller(self.contigs_fasta, gene_caller=gene_caller, debug=self.debug)
+        gene_caller = genecalling.GeneCaller(self.contigs_fasta, gene_caller=gene_caller, args=self.args, debug=self.debug)
 
         gene_calls_dict, amino_acid_sequences = gene_caller.process()
 

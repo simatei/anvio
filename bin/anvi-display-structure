@@ -22,14 +22,14 @@ __maintainer__ = "Özcan Esen"
 __email__ = "ozcanesen@gmail.com"
 __requires__ = ['structure-db', 'variability-profile', 'contigs-db', 'profile-db']
 __provides__ = ['interactive', 'summary']
-
+__description__ = "Interactively visualize sequence variants on protein structures"
 
 
 run = terminal.Run()
 progress = terminal.Progress()
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description="")
+    parser = argparse.ArgumentParser(description=__description__)
 
     groupS = parser.add_argument_group("STRUCTURE", "Information related to the structure database, which can be \
                                                      created with anvi-gen-structure-database.")
@@ -82,6 +82,7 @@ if __name__ == '__main__':
     groupP.add_argument(*anvio.A('port-number'), **anvio.K('port-number'))
     groupP.add_argument(*anvio.A('browser-path'), **anvio.K('browser-path'))
     groupP.add_argument(*anvio.A('server-only'), **anvio.K('server-only'))
+    groupP.add_argument(*anvio.A('password-protected'), **anvio.K('password-protected'))
 
     try:
         args = anvio.get_args(parser)

@@ -194,10 +194,11 @@ ContextMenu = function(options) {
         'get_split_sequence': {
             'title': 'Get split sequence',
             'action': (node, layer, param) => {
+                let target = (mode == 'gene') ? 'gene' : 'contig';
                 $.ajax({
                     type: 'GET',
                     cache: false,
-                    url: '/data/contig/' + node.label,
+                    url: '/data/'+ target + '/' + node.label,
                     success: function(data) {
                         $('#modSplitSequence .modal-title').html('Split Sequence');
                         $('#splitSequence').val('>' + data['header'] + '\n' + data['sequence']);
@@ -284,6 +285,21 @@ ContextMenu = function(options) {
                 });
             }
         },
+        'bigsi': {
+            'title': 'Search random 150bp on BIGSI',
+            'action': (node, layer, param) => {
+                let target = (mode == 'gene') ? 'gene' : 'contig';
+                $.ajax({
+                    type: 'GET',
+                    cache: false,
+                    url: '/data/' + target + '/' + node.label,
+                    success: function(data) {
+                        let bigsi = new BIGSI(data['header'], data['sequence']);
+                        bigsi.Search();
+                    }
+                });
+            }
+        },
         'hmm_RecA': {
             'title': 'RecA',
             'action': (node, layer, param) => { this.menu_items['get_hmm_sequence']['action'](node, layer, 'RecA'); }
@@ -355,6 +371,8 @@ ContextMenu.prototype.BuildMenu = function() {
                 menu.push('blastx_nr');
                 menu.push('blastn_refseq_genomic');
                 menu.push('blastx_refseq_protein');
+                menu.push('divider');
+                menu.push('bigsi');
             }
         }
         else
@@ -388,9 +406,8 @@ ContextMenu.prototype.Show = function() {
     var list = document.createElement('ul');
     list.setAttribute('class', 'dropdown-menu context-menu');
     list.setAttribute('role', 'menu');
+    list.style.visibility = 'hidden';
     list.style.display = 'block';
-    list.style.left = this.event.clientX + 'px';
-    list.style.top = this.event.clientY + 'px';
 
     for (const item of this.BuildMenu()) {
         if (item == 'divider') {
@@ -401,6 +418,9 @@ ContextMenu.prototype.Show = function() {
     }
 
     this.container.appendChild(list);
+    list.style.left = Math.min(VIEWER_WIDTH - list.clientWidth, this.event.clientX) + 'px';
+    list.style.top = Math.min(VIEWER_HEIGHT - list.clientHeight, this.event.clientY) + 'px';
+    list.style.visibility = '';
 
     list.addEventListener('click', (event) => {
         let item_name = event.target.getAttribute('item-name');

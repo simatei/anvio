@@ -140,15 +140,24 @@ class StructureDatabase(object):
             raise ConfigError("store :: rows_data must be either a list of tuples or a pandas dataframe.")
 
 
-    def get_summary_for_interactive(self, corresponding_gene_call):
-        summary = {}
-
+    def get_pdb_content(self, corresponding_gene_call):
         if not corresponding_gene_call in self.genes_with_structure:
             raise ConfigError('The gene caller id {} was not found in the structure database :('.format(corresponding_gene_call))
 
-        summary['pdb_content'] = self.db.get_single_column_from_table(t.structure_pdb_data_table_name,
+        return self.db.get_single_column_from_table(t.structure_pdb_data_table_name,
             'pdb_content', where_clause="corresponding_gene_call = %d" % corresponding_gene_call)[0].decode('utf-8')
 
+
+    def export_pdb_content(self, corresponding_gene_call, filepath, ok_if_exists=False):
+        if filesnpaths.is_output_file_writable(filepath, ok_if_exists=ok_if_exists):
+            pdb_content = self.get_pdb_content(corresponding_gene_call)
+            with open(filepath, 'w') as f:
+                f.write(pdb_content)
+
+
+    def get_summary_for_interactive(self, corresponding_gene_call):
+        summary = {}
+        summary['pdb_content'] = self.get_pdb_content(corresponding_gene_call)
         summary['residue_info'] = self.db.get_table_as_dataframe(t.structure_residue_info_table_name,
             where_clause = "corresponding_gene_call = %d" % corresponding_gene_call).to_json(orient='index')
 
@@ -208,12 +217,12 @@ class Structure(object):
         # identify which genes user wants to model structures for
         self.genes_of_interest = self.get_genes_of_interest(self.genes_of_interest_path, self.gene_caller_ids)
 
-        self.sanity_check()
-
         # residue annotation
         self.residue_annotation_sources_info = self.get_residue_annotation_sources_info()
         self.residue_info_table_structure, self.residue_info_table_types = self.get_residue_info_table_structure()
         self.residue_annotation_df = pd.DataFrame({})
+
+        self.sanity_check()
 
         # initialize StructureDatabase
         self.structure_db = StructureDatabase(self.output_db_path,
@@ -293,7 +302,7 @@ class Structure(object):
             self.run.warning("You selected a percent identical cutoff of {}%. Below 25%, you should pay close attention \
                               to the quality of the proteins...".format(self.percent_identical_cutoff))
 
-        # check that DSSP exists
+        # check that DSSP exists and works
         if self.skip_DSSP:
             self.run.warning("You requested to skip amino acid residue annotation with DSSP. A bold move only an expert could justify... \
                               Anvi'o's respect for you increases slightly.")
@@ -316,6 +325,41 @@ class Structure(object):
 
             self.run.info_single("Anvi'o found the DSSP executable `%s`, and will use it."\
                                   % self.DSSP_executable, nl_before=1, nl_after=1)
+            self.is_executable_a_working_DSSP_program()
+
+
+    def is_executable_a_working_DSSP_program(self):
+        test_input = os.path.join(os.path.dirname(anvio.__file__), 'tests/sandbox/mock_data_for_structure/STRUCTURES/0.pdb')
+
+        p = PDBParser()
+        test_structure = p.get_structure('test', test_input)
+        test_model = test_structure[0] # pdb files can have multiple models. DSSP assumes the first.
+
+        # run DSSP
+        try:
+            test_residue_annotation = DSSP(test_model, test_input, dssp = self.DSSP_executable, acc_array = "Wilke")
+        except Exception as e:
+            raise ConfigError('Your executable of DSSP, `{}`, doesn\'t appear to be working. For information on how to test\
+                               that your version is working correctly, please visit\
+                               http://merenlab.org/2016/06/18/installing-third-party-software/#dssp'\
+                               .format(self.DSSP_executable))
+
+        if not len(test_residue_annotation.keys()):
+            raise ConfigError("Your executable of DSSP, `{}`, exists but didn't return any meaningful output. This\
+                               is a known issue with certain distributions of DSSP. For information on how to test\
+                               that your version is working correctly, please visit\
+                               http://merenlab.org/2016/06/18/installing-third-party-software/#dssp"\
+                               .format(self.DSSP_executable))
+
+        try:
+            self.convert_DSSP_output_from_biopython_to_dataframe(test_residue_annotation)
+        except:
+            import pickle
+            with open('troubleshoot_DDSP_output.pickle', 'wb') as output:
+                pickle.dump(test_residue_annotation, output, pickle.HIGHEST_PROTOCOL)
+            raise ConfigError('Your executable of DSSP ran and produced an output, but anvi\'o wasn\'t able to correctly parse it.\
+                               This is probably our fault. In your working directory should exist a file named "troubleshoot_DDSP_output.pickle".\
+                               Please send this to an anvio developer so that we can help identify what went wrong.')
 
 
     def get_genes_of_interest(self, genes_of_interest_path=None, gene_caller_ids=None):
@@ -523,13 +567,6 @@ class Structure(object):
         # run DSSP
         residue_annotation = DSSP(model, pdb_filepath, dssp = self.DSSP_executable, acc_array = "Wilke")
 
-        if not len(residue_annotation.keys()):
-            raise ConfigError("Your executable of DSSP, `{}`, exists but didn't return any meaningful output. This\
-                               is a known issue with certain distributions of DSSP. For information on how to test\
-                               that your version is working correctly, please visit\
-                               http://merenlab.org/2016/06/18/installing-third-party-software/#dssp"\
-                               .format(self.DSSP_executable, pdb_filepath))
-
         # convert to a digestible format
         return self.convert_DSSP_output_from_biopython_to_dataframe(residue_annotation)
 
@@ -563,7 +600,6 @@ class Structure(object):
             - relative indicies for h-bonds replaced with absolute residue indices
               (e.g. if relative index = -1 for residue 4, the absolute residue index is 3)
         """
-
         one_to_three = {v: k for k, v in constants.AA_to_single_letter_code.items()}
         columns = list(self.residue_annotation_sources_info["DSSP"]["structure"].keys())
 
@@ -863,6 +899,87 @@ class StructureUpdate(Structure):
                                   % self.DSSP_executable, nl_before=1, nl_after=1)
 
 
+class StructureExport():
+    def __init__(self, args, genes_of_interest=None, run=terminal.Run(), progress=terminal.Progress()):
+        self.args = args
+        self.run = run
+        self.progress = progress
+
+        A = lambda x, t: t(args.__dict__[x]) if x in self.args.__dict__ else None
+        null = lambda x: x
+        self.structure_db_path = A('structure_db', null)
+        self.output_dir = A('output_dir', null)
+        self.genes_of_interest_path = A('genes_of_interest', null)
+        self.gene_caller_ids = A('gene_caller_ids', null)
+        self.genes_of_interest = genes_of_interest
+
+        self.output_dir = filesnpaths.check_output_directory(self.output_dir, ok_if_exists=False)
+        filesnpaths.gen_output_directory(self.output_dir)
+        self.load_structure_db()
+        self.genes_of_interest = self.get_genes_of_interest(self.genes_of_interest_path, self.gene_caller_ids)
+
+
+    def export_pdbs(self):
+        self.progress.new('Exporting structure files')
+        for i, gene in enumerate(self.genes_of_interest):
+            self.progress.update('Processed {} of {}'.format(i, len(self.genes_of_interest)))
+            file_path = os.path.join(self.output_dir, 'gene_{}.pdb'.format(gene))
+            self.structure_db.export_pdb_content(gene, file_path, ok_if_exists=True)
+        self.progress.end()
+
+
+    def get_genes_of_interest(self, genes_of_interest_path, gene_caller_ids):
+        if self.genes_of_interest:
+            genes_of_interest = self.genes_of_interest
+        else:
+            genes_of_interest = None
+
+            if genes_of_interest_path and gene_caller_ids:
+                raise ConfigError("You can't provide a gene caller id from the command line, and a list of gene caller ids\
+                                   as a file at the same time, obviously.")
+
+            if gene_caller_ids:
+                gene_caller_ids = set([x.strip() for x in gene_caller_ids.split(',')])
+
+                genes_of_interest = []
+                for gene in gene_caller_ids:
+                    try:
+                        genes_of_interest.append(int(gene))
+                    except:
+                        raise ConfigError("Anvi'o does not like your gene caller id '%s'..." % str(gene))
+
+                genes_of_interest = set(genes_of_interest)
+
+            elif genes_of_interest_path:
+                filesnpaths.is_file_tab_delimited(genes_of_interest_path, expected_number_of_fields=1)
+
+                try:
+                    genes_of_interest = set([int(s.strip()) for s in open(genes_of_interest_path).readlines()])
+                except ValueError:
+                    raise ConfigError("Well. Anvi'o was working on your genes of interest ... and ... those gene IDs did not\
+                                       look like anvi'o gene caller ids :/ Anvi'o is now sad.")
+
+            if not genes_of_interest:
+                genes_of_interest = self.structure_db.genes_with_structure
+                self.run.warning("You did not specify any genes of interest, so anvi'o will assume all of them are of interest.")
+
+        genes_missing_from_structure_db = [gene for gene in genes_of_interest if gene not in self.structure_db.genes_with_structure]
+        if genes_missing_from_structure_db:
+            show_a_few = genes_missing_from_structure_db if len(genes_missing_from_structure_db) <= 10 else genes_missing_from_structure_db[:10]
+            raise ConfigError("{} gene(s) were specified by you but don't exist in the structure database. Here are some of their IDs: {}".
+                format(len(genes_missing_from_structure_db), ', '.join([str(x) for x in show_a_few])))
+
+        return genes_of_interest
+
+
+    def load_structure_db(self):
+        utils.is_structure_db(self.structure_db_path)
+        self.structure_db = StructureDatabase(self.structure_db_path,
+                                              ignore_hash=True,
+                                              create_new=False)
+
+
+
 class ContactMap(object):
     def __init__(self, pdb_path, distance_method='CA', threshold=6, p=terminal.Progress(), r=terminal.Run()):
         self.pdb_path = pdb_path
@@ -878,7 +995,7 @@ class ContactMap(object):
     def load_pdb_file(self, name_id = 'structure'):
         p = PDBParser()
         model = p.get_structure(name_id, self.pdb_path)[0] # [0] = first model
-        structure = model[' '] # [' '] = get first chain in model
+        structure = model['A'] # ['A'] = get first chain in model
         return structure
 
 

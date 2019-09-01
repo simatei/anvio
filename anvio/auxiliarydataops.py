@@ -21,24 +21,25 @@ __license__ = "GPL 3.0"
 __maintainer__ = "A. Murat Eren"
 __email__ = "a.murat.eren@gmail.com"
 
-
 run = terminal.Run()
 progress = terminal.Progress()
 pp = terminal.pretty_print
 
+COVERAGE_DTYPE = 'uint16'
+COVERAGE_MAX_VALUE = np.iinfo(COVERAGE_DTYPE).max
+
 class AuxiliaryDataForSplitCoverages(object):
-    def __init__(self, file_path, db_hash, create_new=False, ignore_hash=False, run=run, progress=progress, quiet=False):
+    def __init__(self, db_path, db_hash, create_new=False, ignore_hash=False, run=run, progress=progress, quiet=False):
         self.db_type = 'auxiliary data for coverages'
         self.db_hash = str(db_hash)
         self.version = anvio.__auxiliary_data_version__
-        self.file_path = file_path
+        self.db_path = db_path
         self.quiet = quiet
         self.run = run
         self.progress = progress
-        self.numpy_data_type = 'uint16'
         self.coverage_entries = []
 
-        self.db = db.DB(self.file_path, self.version, new_database=create_new)
+        self.db = db.DB(self.db_path, self.version, new_database=create_new)
 
         if create_new:
             self.create_tables()
@@ -65,7 +66,7 @@ class AuxiliaryDataForSplitCoverages(object):
 
 
     def append(self, split_name, sample_name, coverage_list):
-        coverage_list_blob = utils.convert_numpy_array_to_binary_blob(np.array(coverage_list, dtype=self.numpy_data_type))
+        coverage_list_blob = utils.convert_numpy_array_to_binary_blob(np.array(coverage_list, dtype=COVERAGE_DTYPE))
         self.coverage_entries.append((split_name, sample_name, coverage_list_blob, ))
 
 
@@ -107,19 +108,19 @@ class AuxiliaryDataForSplitCoverages(object):
 
 
     def get(self, split_name):
-        cursor = self.db._exec('''SELECT sample_name, coverages FROM %s WHERE split_name = "%s"''' % 
+        cursor = self.db._exec('''SELECT sample_name, coverages FROM %s WHERE split_name = "%s"''' %
                                                  (t.split_coverages_table_name, split_name))
 
         rows = cursor.fetchall()
 
         if len(rows) == 0:
-            raise AuxiliaryDataError('Database does not know anything about split "%s"' % split_name)
+            raise AuxiliaryDataError('The auxiliary database at "%s" does not know anything about the split "%s"' % (self.db_path, split_name))
 
         split_coverage = {}
         for row in rows:
             sample_name, coverage_blob = row # unpack sqlite row tuple
 
-            split_coverage[sample_name] = utils.convert_binary_blob_to_numpy_array(coverage_blob, dtype=self.numpy_data_type)
+            split_coverage[sample_name] = utils.convert_binary_blob_to_numpy_array(coverage_blob, dtype=COVERAGE_DTYPE)
 
         return split_coverage
 

@@ -144,6 +144,13 @@ var named_layers = {
         'pretty_name': 'Num gene clusters',
         'type': 'bar',
     },
+    'num_gene_clusters_raw': {
+        'height': 220,
+        'color': '#661111',
+        'norm': 'none',
+        'pretty_name': 'Num gene clusters (Raw)',
+        'type': 'bar',
+    },
     'singleton_gene_clusters': {
         'height': 220,
         'color': '#661111',
@@ -205,6 +212,15 @@ var named_layers = {
         'max': 1,
         'type': 'intensity',
         'pretty_name': 'Geo. Homogeneity Ind.',
+    },
+    'combined_homogeneity_index': {
+        'height': 180,
+        'color': '#326b59',
+        'norm': 'none',
+        'min': 0,
+        'max': 1,
+        'type': 'intensity',
+        'pretty_name': 'Comb. Homogeneity Ind.',
     },
     'max_num_paralogs': {
         'height': 180,
@@ -308,6 +324,10 @@ var named_layers = {
     'bin_name': {
         'type': 'text',
         'pretty_name': 'Bin name',
+    },
+    'matching_domain': {
+        'type': 'text',
+        'pretty_name': 'Matching domain',
     },
     'blank_view': {
         'height': 0,

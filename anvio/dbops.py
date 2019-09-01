@@ -14,6 +14,8 @@ import random
 import argparse
 import textwrap
 import multiprocessing
+import itertools
+import scipy.signal
 
 from io import StringIO
 from collections import Counter
@@ -43,6 +45,7 @@ from anvio.tables.ntpositions import TableForNtPositions
 from anvio.tables.miscdata import TableForItemAdditionalData
 from anvio.tables.miscdata import TableForLayerAdditionalData
 from anvio.tables.kmers import KMerTablesForContigsAndSplits
+from anvio.tables.genelevelcoverages import TableForGeneLevelCoverages
 from anvio.tables.contigsplitinfo import TableForContigsInfo, TableForSplitsInfo
 
 
@@ -66,15 +69,15 @@ class DBClassFactory:
     def __init__(self):
         self.DB_CLASSES = {'profile': ProfileDatabase,
                            'contigs': ContigsDatabase,
-                           'pan': PanDatabase}
+                           'pan': PanDatabase,
+                           'genes': GenesDatabase}
 
     def get_db_class(self, db_path):
         db_type = utils.get_db_type(db_path)
 
         if db_type not in self.DB_CLASSES:
             raise ConfigError("DBClassFactory speaking. I do not know a class for database type\
-                                %s :/ I can deal with these though: '%s'" % (', '.join(self.DB_CLASSES)))
-
+                                %s :/ I can deal with these though: '%s'" % (db_type, ', '.join(self.DB_CLASSES))) 
         return self.DB_CLASSES[db_type]
 
 
@@ -130,7 +133,7 @@ class ContigsSuperclass(object):
 
         if not self.contigs_db_path:
             raise ConfigError("Someone (hopefully, you) is trying to initialize the Contigs Super Class without a contigs database path.\
-                               There are many ways this can happen, but .. do you think you were trying to run anvi-interactive in\
+                               There are many ways this can happen, but .. do you think you were trying to run anvio-interactive in\
                                manual mode but without a --manual flag right before this? Just a gut feeling... No? Maybe you created\
                                an instance of the profile superclass without a `contigs_db` argument in the namespace? No? Well, then we \
                                may be in a really big trouble. Please run what you did before seeing this again with a `--debug` flag,\
@@ -233,16 +236,55 @@ class ContigsSuperclass(object):
             self.run.info('Splits taxonomy', 'Initiated for taxonomic level for "%s"' % t_level)
 
 
-    def init_contig_sequences(self, min_contig_length=0):
-        self.progress.new('Loading contig sequences')
+    def init_contig_sequences(self, min_contig_length=0, gene_caller_ids_of_interest=set([]), split_names_of_interest=set([])):
+        contigs_db = ContigsDatabase(self.contigs_db_path)
 
+        if len(gene_caller_ids_of_interest) and len(split_names_of_interest):
+            raise ConfigError("Ehem. Someone just called `init_contig_sequences` with gene caller ids of interest AND\
+                               split names of interest. Someone should make up their mind and go for only one of those")
+
+        # are we going to read everything, or only those that are of interest?
+        contig_names_of_interest = set([])
+        if gene_caller_ids_of_interest:
+            for gene_callers_id in self.genes_in_contigs_dict:
+                if gene_callers_id in gene_caller_ids_of_interest:
+                    contig_names_of_interest.add(self.genes_in_contigs_dict[gene_callers_id]['contig'])
+        elif split_names_of_interest:
+            contig_names_of_interest = set([self.splits_basic_info[s]['parent'] for s in split_names_of_interest])
+
+        if gene_caller_ids_of_interest or split_names_of_interest: 
+            # someone was interested in a subest of things, but found nothing for them?
+            if not len(contig_names_of_interest):
+                raise ConfigError("Well, it turns out there are no contigs matching to the list of gene calls anvi'o\
+                                   wanted to work with :( Very sad (and very confusing). If you think this is a bug on\
+                                   our part, please let us know.")
+
+            self.run.warning("Someone asked the contigs super class to initialize contig sequences that are affiliated\
+                              with some of the gene calls or split names relevant for this operation (this is happening either\
+                              becasue the user asked for it, or there was an optimization step somewhere). As a result\
+                              of which, this class will only know %d contig sequences instead of %d in the database." \
+                                % (len(contig_names_of_interest), len(self.contigs_basic_info)),
+                             header="JUST SO YOU KNOW", lc='yellow')
+
+            # load some
+            self.progress.new('Loading contig sequences')
+            self.progress.update('Reading SOME contig sequences')
+            self.contig_sequences = contigs_db.db.get_some_rows_from_table_as_dict(t.contig_sequences_table_name,
+                                                                  '''contig IN (%s)''' % (', '.join(["'%s'" % s for s in contig_names_of_interest])),
+                                                                  error_if_no_data=True)
+            self.progress.end()
+        else:
+            # load all 
+            self.progress.new('Loading contig sequences')
+            self.progress.update('Reading ALL contig sequences')
+            self.contig_sequences = contigs_db.db.get_table_as_dict(t.contig_sequences_table_name, string_the_key=True)
+            self.progress.end()
+
+        contigs_db.disconnect()
+
+        self.progress.new('Filtering contig sequences')
         self.progress.update('Identifying contigs shorter than M')
         contigs_shorter_than_M = set([c for c in self.contigs_basic_info if self.contigs_basic_info[c]['length'] < min_contig_length])
-
-        self.progress.update('Reading contig sequences')
-        contigs_db = ContigsDatabase(self.contigs_db_path)
-        self.contig_sequences = contigs_db.db.get_table_as_dict(t.contig_sequences_table_name, string_the_key=True)
-        contigs_db.disconnect()
 
         self.progress.update('Filtering out shorter contigs')
         for contig_name in contigs_shorter_than_M:
@@ -745,6 +787,7 @@ class ContigsSuperclass(object):
             raise ConfigError('Value for wrap must be larger than 20. Yes. Rules.')
 
         gene_caller_ids_list, sequences_dict = self.get_sequences_for_gene_callers_ids(gene_caller_ids_list, include_aa_sequences=report_aa_sequences)
+        skipped_gene_calls = []
 
         output = open(output_file_path, 'w')
 
@@ -770,12 +813,19 @@ class ContigsSuperclass(object):
             if wrap:
                 sequence = textwrap.fill(sequence, wrap, break_on_hyphens=False)
 
+            if not len(sequence):
+                skipped_gene_calls.append(gene_callers_id)
+                continue
+
             output.write('>%s\n' % header)
             output.write('%s\n' % sequence)
 
         output.close()
-
         self.progress.end()
+
+        if len(skipped_gene_calls):
+            self.run.warning("Gene caller IDs %s have empty AA sequences and skipped." % (", ".join(map(str, skipped_gene_calls))))
+
         self.run.info('Output', output_file_path)
 
 
@@ -839,6 +889,8 @@ class PanSuperclass(object):
         self.pan_db_path = A('pan_db')
         self.genomes_storage_path = A('genomes_storage')
         self.skip_init_functions = A('skip_init_functions')
+        self.just_do_it = A('just_do_it')
+        self.include_gc_identity_as_function = A('include_gc_identity_as_function')
 
         self.genome_names = []
         self.gene_clusters = {}
@@ -863,6 +915,7 @@ class PanSuperclass(object):
         k = TableForItemAdditionalData(self.args).get_available_data_keys()
         self.functional_homogeneity_info_is_available = 'functional_homogeneity_index' in k
         self.geometric_homogeneity_info_is_available = 'geometric_homogeneity_index' in k
+        self.combined_homogeneity_info_is_available = 'combined_homogeneity_index' in k
 
         self.num_gene_clusters = None
         self.num_genes_in_gene_clusters = None
@@ -891,29 +944,16 @@ class PanSuperclass(object):
         self.genome_names = self.p_meta['genome_names']
         self.gene_clusters_gene_alignments_available = self.p_meta['gene_alignments_computed']
 
-        # FIXME: Is this the future where the pan db version is > 6? Great. Then the if statement here no longer
-        # needs to check whether 'gene_clusters_ordered' is a valid key in self.p_meta:
-        if 'gene_clusters_ordered' in self.p_meta and self.p_meta['gene_clusters_ordered']:
-            self.p_meta['available_item_orders'] = sorted([s.strip() for s in self.p_meta['available_item_orders'].split(',')])
-            self.item_orders = pan_db.db.get_table_as_dict(t.item_orders_table_name)
-
-            # we need to convert data for 'basic' item orders to array in order to avoid compatibility issues with
-            # other additional item orders in pan and full mode (otherwise interactive class gets complicated
-            # unnecessarily).
-            for item_order in self.item_orders:
-                if self.item_orders[item_order]['type'] == 'basic':
-                    try:
-                        self.item_orders[item_order]['data'] = self.item_orders[item_order]['data'].split(',')
-                    except:
-                        raise ConfigError("Something is wrong with the basic order `%s` in this pan database :(" % (item_order))
-        else:
-            self.p_meta['available_item_orders'] = None
-            self.p_meta['default_item_order'] = None
-            self.item_orders = None
+        self.p_meta['available_item_orders'], self.item_orders = get_item_orders_from_db(self.pan_db_path)
 
         # recover all gene cluster names so others can access to this information
         # without having to initialize anything
         self.gene_cluster_names = set(pan_db.db.get_single_column_from_table(t.pan_gene_clusters_table_name, 'gene_cluster_id'))
+
+        if not self.gene_cluster_names:
+            raise ConfigError("You seem to have no gene clusters in this pan database :/ This is weird,\
+                               sad, and curious at the same time. Probably you will have to go back to\
+                               previous outputs of your worklow to make sure everything worked out properly.")
 
         pan_db.disconnect()
 
@@ -936,8 +976,9 @@ class PanSuperclass(object):
 
         F = lambda x: '[YES]' if x else '[NO]'
         self.run.info('Pan DB', 'Initialized: %s (v. %s)' % (self.pan_db_path, anvio.__pan__version__))
-        self.run.info('Gene cluster homogeneity estimates', 'Functional: %s; Geometric: %s' % \
-                         (F(self.functional_homogeneity_info_is_available), F(self.geometric_homogeneity_info_is_available)),
+        self.run.info('Gene cluster homogeneity estimates', 'Functional: %s; Geometric: %s; Combined: %s' % \
+                         (F(self.functional_homogeneity_info_is_available), F(self.geometric_homogeneity_info_is_available),
+                          F(self.combined_homogeneity_info_is_available)),
                       mc="cyan")
 
 
@@ -975,17 +1016,29 @@ class PanSuperclass(object):
                                both command line and interactive anvi'o interfaces.")
 
         if not skip_alignments and self.gene_clusters_gene_alignments_available and report_DNA_sequences:
-            self.run.warning("Please read carefully. Here anvi'o attempts to get sequences for the gene clusters you are interested in. While\
-                              the amino acid sequences for those gene clusters were aligned, you are asking for DNA sequences. While amino acid\
-                              seuqence alignment summary (the anvi'o way of storing alignment information) can be used to align DNA sequences\
-                              instantaneously, due to intricacies of gene callers, the amino acid sequence of a gene stored in the\
-                              contigs database may differ from its DNA seqeunce. For those rare instances, the alignment summary for the amino acid\
-                              sequence can no longer be used to make sense of the DNA sequence (see https://github.com/merenlab/anvio/issues/772 for\
-                              more informaiton). What needs to be done is to do another alignment on the fly. But as you probably already guessed,\
-                              anvi'o will not do that for you, and instead will report your DNA sequences for your genes in your gene clusters\
-                              unaligned. If you really really think anvi'o should do it you have two options: if you are a member of the MerenLab,\
-                              re-open and fix the issue #772. If you are not a member, then send us an e-mail.")
-            skip_alignments = True
+            if self.just_do_it:
+                self.run.warning("Please read carefully. Since you are using the flag `--just-do-it`, anvi'o will attempt to do someting that may not\
+                                  work in some cases. It seems you wish to get sequences for some gene clusters you are interested in. Even though\
+                                  it was the the amino acid sequences that was aligned for these gene clusters, you are asking for DNA sequences.\
+                                  Anvi'o will convert the amino acid sequence alignment into a DNA alignment instantly (wihtout any additional\
+                                  alignment step), but due to the intricacies of gene calling, the amino acid sequence of a gene that is stored\
+                                  in the contigs database may differ from its DNA sequence. YES THAT IS TRUE BECAUSE THAT'S HOW BIOINFORATICS ROLLS.\
+                                  For those rare instances, the alignment summary for the amino acid sequence can no longer be used to make sense of\
+                                  the DNA sequence (see https://github.com/merenlab/anvio/issues/772 for an example in which we have observed this).\
+                                  But we will give it a try here in your case becasue you asked anvi'o to just do it :/ If this explodes downstream,\
+                                  it is on you alone.")
+            else:
+                self.run.warning("Please read carefully. At this part of the code anvi'o attempts to get sequences for the gene clusters you are\
+                                  interested in. While it was the amino acid sequences that were aligned here, you are you are asking for DNA sequences.\
+                                  Even though the amino acid sequence alignment summary (the anvi'o way of storing alignment information) can be used to\
+                                  align DNA sequences instantaneously, due to intricacies associated with the gene calling step, the amino acid sequence\
+                                  of a gene stored in the contigs database may differ from its DNA sequence (true story). For those rare instances, the\
+                                  alignment summary for the amino acid sequence may no longer be used to make sense of the DNA sequence \
+                                  (see https://github.com/merenlab/anvio/issues/772 for more information). What needs to be done is to do another alignment\
+                                  on the fly. But as you probably already have already guessed, anvi'o will not do that for you, and instead it will report\
+                                  your DNA sequences for your genes in your gene clusters unaligned. If you really really want to try and see whether it will\
+                                  work for your gene clusters here, you can try to include `--just-do-it` flag in your command line.")
+                skip_alignments = True
 
         sequences = {}
 
@@ -1000,7 +1053,7 @@ class PanSuperclass(object):
             raise ConfigError("gene_cluster_names for get_sequences_for_gene_clusters must be a non-empty `set`.")
 
         if not self.genomes_storage_is_available:
-            raise ConfigError("The pan anvi'o super class for is upset. You are attempting to get AA seqeunces for %s,\
+            raise ConfigError("The pan anvi'o super class for is upset. You are attempting to get AA sequences for %s,\
                                but there is not genomes storage is available to get it." \
                                     % 'a gene cluster' if len(gene_cluster_names) > 1 else '%d gene_clusters' % len(gene_cluster_names))
 
@@ -1015,9 +1068,10 @@ class PanSuperclass(object):
                                Here are some of the missing ones; %s" \
                                         % (len(missing_gene_cluster_names), len(gene_cluster_names), ', '.join(missing_gene_cluster_names[0:5])))
 
-        self.progress.new('Accessing gene cluster seqeunces')
+        self.progress.new('Accessing gene cluster sequences', progress_total_items=len(gene_cluster_names))
 
         for gene_cluster_name in gene_cluster_names:
+            self.progress.increment()
             self.progress.update("processing '%s' ..." % gene_cluster_name )
             sequences[gene_cluster_name] = {}
             for genome_name in gene_clusters_dict[gene_cluster_name]:
@@ -1052,7 +1106,7 @@ class PanSuperclass(object):
 
         homogeneity_calculator = homogeneityindex.HomogeneityCalculator(quick_homogeneity=self.args.quick_homogeneity)
 
-        self.progress.new('Computing gene cluster homogeneity indices')
+        self.progress.new('Computing gene cluster homogeneity indices', progress_total_items=len(gene_cluster_names))
         self.progress.update('Initializing %d threads...' % num_threads)
 
         manager = multiprocessing.Manager()
@@ -1076,9 +1130,11 @@ class PanSuperclass(object):
                 homogeneity_dict = output_queue.get()
                 if homogeneity_dict:
                     results_dict[homogeneity_dict['gene cluster']] = {'functional_homogeneity_index': homogeneity_dict['functional'],
-                                                                      'geometric_homogeneity_index': homogeneity_dict['geometric']}
+                                                                      'geometric_homogeneity_index': homogeneity_dict['geometric'],
+                                                                      'combined_homogeneity_index': homogeneity_dict['combined']}
 
                 received_gene_clusters += 1
+                self.progress.increment(increment_to=received_gene_clusters)
                 self.progress.update('Processed %d gene clusters using %d threads' % (received_gene_clusters, num_threads))
             except KeyboardInterrupt:
                 print("Recieved SIGINT, terminating all processes...")
@@ -1106,7 +1162,7 @@ class PanSuperclass(object):
             gene_cluster[gene_cluster_name] = gene_clusters_dict[gene_cluster_name]
 
             try:
-                funct_index, geo_index = homogeneity_calculator.get_homogeneity_dicts(gene_cluster)
+                funct_index, geo_index, combined_index = homogeneity_calculator.get_homogeneity_dicts(gene_cluster)
             except:
                 run.warning("Homogeneity indices computation for gene cluster %s failed. This can happen due to one of three reasons: \
                              (1) this gene cluster is named incorrectly, does not exist in the database, or is formatted into the input \
@@ -1117,10 +1173,12 @@ class PanSuperclass(object):
                              analysis." % gene_cluster_name)
                 funct_index[gene_cluster_name] = -1
                 geo_index[gene_cluster_name] = -1
+                combined_index[gene_cluster_name] = -1
 
             indices_dict['gene cluster'] = gene_cluster_name
             indices_dict['functional'] = funct_index[gene_cluster_name]
             indices_dict['geometric'] = geo_index[gene_cluster_name]
+            indices_dict['combined'] = combined_index[gene_cluster_name]
 
             output_queue.put(indices_dict)
 
@@ -1136,7 +1194,7 @@ class PanSuperclass(object):
                                                               skip_alignments=skip_alignments,
                                                               report_DNA_sequences=report_DNA_sequences)
 
-        self.progress.new('Writing gene cluster seqeunces to file')
+        self.progress.new('Writing gene cluster sequences to file')
         sequence_counter = 0
         for gene_cluster_name in sequences_dict:
             for genome_name in sequences_dict[gene_cluster_name]:
@@ -1298,13 +1356,14 @@ class PanSuperclass(object):
         for gene_cluster in self.gene_clusters_functions_dict:
             gene_clusters_functions_summary_dict[gene_cluster] = {}
             gene_clusters_functions_summary_dict[gene_cluster]['gene_cluster_function'] = None
+            gene_clusters_functions_summary_dict[gene_cluster]['gene_cluster_function_accession'] = None
             max_votes = 0
             for genome in self.gene_clusters_functions_dict[gene_cluster]:
                 for gene_caller_id in self.gene_clusters_functions_dict[gene_cluster][genome]:
                     if functional_annotation_source in self.gene_clusters_functions_dict[gene_cluster][genome][gene_caller_id]:
                         annotation_blob = self.gene_clusters_functions_dict[gene_cluster][genome][gene_caller_id][functional_annotation_source]
                         accessions, annotations = [l.split('!!!') for l in annotation_blob.split("|||")]
-                        for f in annotations:
+                        for a, f in zip(accessions, annotations):
                             if f not in gene_clusters_functions_summary_dict[gene_cluster]:
                                 gene_clusters_functions_summary_dict[gene_cluster][f] = 0
 
@@ -1313,6 +1372,7 @@ class PanSuperclass(object):
                                 # The function has the votes!
                                 max_votes = gene_clusters_functions_summary_dict[gene_cluster][f]
                                 gene_clusters_functions_summary_dict[gene_cluster]['gene_cluster_function'] = f
+                                gene_clusters_functions_summary_dict[gene_cluster]['gene_cluster_function_accession'] = a
 
         self.progress.end()
 
@@ -1350,6 +1410,18 @@ class PanSuperclass(object):
 
                     if functions:
                         self.gene_clusters_function_sources.update(list(functions.keys()))
+
+        if self.include_gc_identity_as_function:
+            self.progress.reset()
+            self.run.info_single("Gene cluster identities are being added as functions into the functions dictionary.\
+                                  Functional annotation resources will include `IDENTITY` as an option. See here why\
+                                  (apart from the fact that you asked for it by using the flag `--include-gc-identity-as-function`):\
+                                  https://github.com/merenlab/anvio/issues/1196", nl_after=1, mc='green')
+            for gene_cluster_id in self.gene_clusters:
+                for genome_name in self.genome_names:
+                    for gene_callers_id in self.gene_clusters[gene_cluster_id][genome_name]:
+                        self.gene_clusters_functions_dict[gene_cluster_id][genome_name][gene_callers_id]['IDENTITY'] = '%s|||%s' % (gene_cluster_id, gene_cluster_id)
+            self.gene_clusters_function_sources.update(['IDENTITY'])
 
         self.functions_initialized = True
 
@@ -1482,7 +1554,7 @@ class PanSuperclass(object):
     def filter_gene_clusters_from_gene_clusters_dict(self, gene_clusters_dict, min_num_genomes_gene_cluster_occurs=0,
              max_num_genomes_gene_cluster_occurs=sys.maxsize, min_num_genes_from_each_genome=0, max_num_genes_from_each_genome=sys.maxsize,
              min_functional_homogeneity_index=-1, max_functional_homogeneity_index=1, min_geometric_homogeneity_index=-1,
-             max_geometric_homogeneity_index=1):
+             max_geometric_homogeneity_index=1, min_combined_homogeneity_index=-1, max_combined_homogeneity_index=1):
         """This takes in your `gene_clusters_dict`, and removes gene_clusters based on their occurrences across genomes.
 
            The `min_num_genomes_gene_cluster_occurs` parameter defines what is the minimum number of genomes you want a gene to
@@ -1529,6 +1601,15 @@ class PanSuperclass(object):
                 min_geometric_homogeneity_index = -1
                 max_geometric_homogeneity_index = 1
 
+        if not self.combined_homogeneity_info_is_available:
+            if min_combined_homogeneity_index != -1 or max_combined_homogeneity_index != 1:
+                self.run.warning("You are trying to filter your gene clusters by combined homogeneity, when your pan database does not\
+                                  include information about combined homogeneity. You can always compute this index for all of your \
+                                  gene clusters using 'anvi-compute-gene-cluster-homogeneity', but anvi'o will override your decision for now.\
+                                  You will not be able to filter your gene clusters by combined homogeneity at this time.")
+                min_combined_homogeneity_index = -1
+                max_combined_homogeneity_index = 1
+
         if min_num_genomes_gene_cluster_occurs < 0 or max_num_genomes_gene_cluster_occurs < 0:
             raise ConfigError("When you ask for a negative value for the the minimum or maximum number of genomes a gene cluster is expected\
                                to be found, you are pushing the boundaries of physics instead of biology. Let's focus on one field of science\
@@ -1557,6 +1638,18 @@ class PanSuperclass(object):
             if max_functional_homogeneity_index < min_functional_homogeneity_index or max_geometric_homogeneity_index < min_geometric_homogeneity_index:
                 raise ConfigError("Please. Check your parameters. Make sure that minimum values are less than (or equal to) maximum values. We beg you")
 
+        if self.combined_homogeneity_info_is_available:
+            if min_combined_homogeneity_index < 0 and min_combined_homogeneity_index != -1:
+                raise ConfigError("The combined homogeneity index have a mininum value of 0, along with an error value of -1. You can either ask for\
+                                   values of 0 or greater, or put in '-1'. These are hard limits.")
+
+            if max_combined_homogeneity_index > 1:
+                raise ConfigError("The combined homogeneity index has a maximum possible value of 1. Your parameters exceed this hard upper limit.\
+                                   Please check your parameters.")
+
+            if max_combined_homogeneity_index < min_combined_homogeneity_index:
+                raise ConfigError("Please. Check your parameters. Make sure that minimum values are less than (or equal to) maximum values. We beg you")
+
         all_genomes = self.get_all_genome_names_in_gene_clusters_dict(gene_clusters_dict)
 
         if max_num_genomes_gene_cluster_occurs == sys.maxsize:
@@ -1571,8 +1664,11 @@ class PanSuperclass(object):
                                that is not what you're doing." % (len(all_genomes), min_num_genomes_gene_cluster_occurs))
 
         gene_cluster_occurrences_accross_genomes, num_genes_contributed_per_genome = self.get_basic_gene_clusters_stats(gene_clusters_dict)
-        if self.functional_homogeneity_info_is_available and self.geometric_homogeneity_info_is_available:
+        if self.functional_homogeneity_info_is_available and self.geometric_homogeneity_info_is_available and not self.combined_homogeneity_info_is_available:
             homogeneity_keys, homogeneity_dict = TableForItemAdditionalData(self.args).get(['functional_homogeneity_index', 'geometric_homogeneity_index'])
+        elif self.functional_homogeneity_info_is_available and self.geometric_homogeneity_info_is_available and self.combined_homogeneity_info_is_available:
+            homogeneity_keys, homogeneity_dict = TableForItemAdditionalData(self.args).get(['functional_homogeneity_index', 'geometric_homogeneity_index', 'combined_homogeneity_index'])
+        
 
         gene_clusters_to_remove = set([])
         all_gene_clusters = set(list(gene_cluster_occurrences_accross_genomes.keys()))
@@ -1596,13 +1692,26 @@ class PanSuperclass(object):
                 if homogeneity_dict[gene_cluster_name]['geometric_homogeneity_index'] < min_geometric_homogeneity_index or homogeneity_dict[gene_cluster_name]['geometric_homogeneity_index'] > max_geometric_homogeneity_index:
                     gene_clusters_to_remove.add(gene_cluster_name)
                     continue
+
             except:
                 if min_functional_homogeneity_index == -1 and max_functional_homogeneity_index == 1 and min_geometric_homogeneity_index == -1 and max_geometric_homogeneity_index == 1:
                     continue #No need to raise an error if the parameters are default/all at their bounds
 
-                raise ConfigError("Bad news: anvi'o was unable to retrieve homogeneity indices for gene cluster %s. This could be because homogeneity was not \
-                                   computed for this gene cluster when the pangenomic analysis was created. The good news is that you can fix that!\
-                                   Take a look at the anvi-compute-gene-cluster-homogeneity script")
+                raise ConfigError("Bad news: anvi'o was unable to retrieve functional and geometric homogeneity indices for gene cluster %s. This could be because \
+                                   functional and geometric homogeneity was not computed for this gene cluster when the pangenomic analysis was created. \
+                                   The good news is that you can fix that! Take a look at the anvi-compute-gene-cluster-homogeneity script" % gene_cluster_name)
+
+            try:
+                if homogeneity_dict[gene_cluster_name]['combined_homogeneity_index'] < min_combined_homogeneity_index or homogeneity_dict[gene_cluster_name]['combined_homogeneity_index'] > max_combined_homogeneity_index:
+                        gene_clusters_to_remove.add(gene_cluster_name)
+                        continue
+            except:
+                if min_combined_homogeneity_index == -1  and max_combined_homogeneity_index == 1:
+                    continue
+                raise ConfigError("Bad news: anvi'o was unable to retrieve the combined homogeneity index for gene cluster %s. This could be because combined homogeneity was not \
+                                       computed for this gene cluster when the pangenomic analysis was created. The good news is that you can fix that!\
+                                       Take a look at the anvi-compute-gene-cluster-homogeneity script" % gene_cluster_name)
+
 
         gene_clusters_to_keep = all_gene_clusters.difference(gene_clusters_to_remove)
 
@@ -1610,22 +1719,26 @@ class PanSuperclass(object):
             raise ConfigError("Bad news: the combination of your filters resulted in zero gene clusters :/ These are the filtesr anvi'o used: --min-num-genomes-gene-cluster-occurs %(min_oc)d,\
                                --max-num-genomes-gene-cluster-occurs %(max_oc)d, --min-num-genes-from-each-genome %(min_g)d, --max-num-genes-from-each-genome %(max_g)d, \
                                --min-functional-homogeneity-index %(min_fh)f, --max-functional-homogeneity-index %(max_fh)f, --min-geometric-homogeneity-index %(min_gh)f, \
-                               and --max-geometric-homogeneity-index %(max_gh)f. None of your %(all_gcs)d gene clusters in your %(all_gs)d genomes that were included this analysis \
-                               matched to this combination (please note that number of genomes may be smaller than the actual number of genomes in the original pan genome \
+                               --max-geometric-homogeneity-index %(max_gh)f, --min-combined-homogeneity-index %(min_ch)f, and --max-combined-homogeneity-index %(max_ch)f. \
+                               None of your %(all_gcs)d gene clusters in your %(all_gs)d genomes that were included this analysis matched to this combination \
+                               (please note that number of genomes may be smaller than the actual number of genomes in the original pan genome \
                                if other filters were applied to the gene clusters dictionary prior)." % \
                                             {'min_oc': min_num_genomes_gene_cluster_occurs, 'max_oc': max_num_genomes_gene_cluster_occurs,
                                              'min_g': min_num_genes_from_each_genome, 'max_g': max_num_genes_from_each_genome,
                                              'min_fh': min_functional_homogeneity_index, 'max_fh': max_functional_homogeneity_index,
                                              'min_gh': min_geometric_homogeneity_index, 'max_gh': max_geometric_homogeneity_index,
+                                             'min_ch': min_combined_homogeneity_index, 'max_ch': max_combined_homogeneity_index,
                                              'all_gcs': len(all_gene_clusters), 'all_gs': len(all_genomes)})
 
         msg = "Based on --min-num-genomes-gene-cluster-occurs %d, --max-num-genomes-gene-cluster-occurs %d, \
                --min-num-genes-from-each-genome %d, --max-num-genes-from-each-genome %d, --min-functional-homogeneity-index %0.3f, \
-               --max-functional-homogeneity-index %0.3f, --min-geometric-homogeneity-index %0.3f, and \
-               --max-geometric-homogeneity-index %0.3f (some of these may be default values, no need to panic)." \
+               --max-functional-homogeneity-index %0.3f, --min-geometric-homogeneity-index %0.3f,  \
+               --max-geometric-homogeneity-index %0.3f, --min-combined-homogeneity-index %0.3f,  \
+               --max-combined-homogeneity-index %0.3f (some of these may be default values, no need to panic)." \
                             % (min_num_genomes_gene_cluster_occurs, max_num_genomes_gene_cluster_occurs,
                                min_num_genes_from_each_genome, max_num_genes_from_each_genome, min_functional_homogeneity_index,
-                               max_functional_homogeneity_index, min_geometric_homogeneity_index, max_functional_homogeneity_index)
+                               max_functional_homogeneity_index, min_geometric_homogeneity_index, max_functional_homogeneity_index,
+                               min_combined_homogeneity_index, max_combined_homogeneity_index)
 
         # Baris Metin: lambda functions are ugly.
         # Meren Urat : YOU'RE UGLY :(
@@ -1747,6 +1860,8 @@ class PanSuperclass(object):
         max_functional_homogeneity_index = A('max_functional_homogeneity_index')
         min_geometric_homogeneity_index = A('min_geometric_homogeneity_index')
         max_geometric_homogeneity_index = A('max_geometric_homogeneity_index')
+        min_combined_homogeneity_index = A('min_combined_homogeneity_index')
+        max_combined_homogeneity_index = A('max_combined_homogeneity_index')
         add_into_items_additional_data_table = A('add_into_items_additional_data_table')
         gene_clusters_names_of_interest = A('gene_clusters_names_of_interest')
         just_do_it = A('just_do_it')
@@ -1773,7 +1888,9 @@ class PanSuperclass(object):
                                                                       min_functional_homogeneity_index,
                                                                       max_functional_homogeneity_index,
                                                                       min_geometric_homogeneity_index,
-                                                                      max_geometric_homogeneity_index)
+                                                                      max_geometric_homogeneity_index,
+                                                                      min_combined_homogeneity_index,
+                                                                      max_combined_homogeneity_index)
 
         # this is where we add the items in the resulting filtered dict into the items additonal data
         # table:
@@ -2057,12 +2174,12 @@ class ProfileSuperclass(object):
         is to use the collections framework (the elegant way of doing this). For which, you need to
         set collection name:
 
-            >>> args.collection_name = 'collcetion_name'
+            >>> args.collection_name = 'collection_name'
             >>> args.bin_ids = 'bin_1,bin_2,bin_3' # if no bin_ids is provided, all bins will be used
             >>> p = ProfileSuperClass(args)
 
 
-        The best practice is to set anvi'o programs to put together `args` objectd with these variables.
+        The best practice is to set anvi'o programs to put together `args` objects with these variables.
        """
 
     def __init__(self, args, r=run, p=progress):
@@ -2071,7 +2188,7 @@ class ProfileSuperclass(object):
         self.progress = p
 
         # these are initialized by the member function `init_gene_level_coverage_stats_dicts`. but you knew
-        # that already becasue you are a smart ass.
+        # that already because you are a smart ass.
         self.gene_level_coverage_stats_dict = {}
         self.split_coverage_values_per_nt_dict = {}
 
@@ -2080,25 +2197,40 @@ class ProfileSuperclass(object):
         self.split_coverage_values = None
 
         # the following two are initialized via `init_items_additional_data()` and use information
-        # stored in item additional data tables
-        self.items_additional_data_dict = None
-        self.items_additional_data_keys = None
+        # stored in item additional data tables UNLESS THEY ARE ALREADY INITIALIZED IN THE CONTEXT
+        # FROM WITHIN PROFILE SUPERCLASS IS INHERITED (SUCH A THING IS HAPPENING AT THE INTERACTIVE
+        # CLASS)
+        if super() and 'items_additional_data_dict' in dir(self) and 'items_additional_data_keys' in dir(self):
+            pass
+        else:
+            self.items_additional_data_dict = None
+            self.items_additional_data_keys = None
+
+        if super() and 'layers_additional_data_dict' in dir(self) and 'layers_additional_data_keys' in dir(self):
+            pass
+        else:
+            self.layers_additional_data_keys, self.layers_additional_data_dict = TableForLayerAdditionalData(self.args).get_all()
 
         self.auxiliary_profile_data_available = None
         self.auxiliary_data_path = None
+        self.genes_db_available = None
+        self.genes_db_path = None
 
         self.split_names = set([])
         self.item_orders = {}
         self.views = {}
         self.collection_profile = {}
 
+
+
         A = lambda x: args.__dict__[x] if x in args.__dict__ else None
         self.profile_db_path = A('profile_db')
         self.contigs_db_path = A('contigs_db')
         init_gene_coverages = A('init_gene_coverages')
-        populate_nt_level_coverage = A('populate_nt_level_coverage')
+        init_split_coverage_values_per_nt = A('init_split_coverage_values_per_nt')
         outliers_threshold = A('outliers_threshold')
         zeros_are_outliers = A('zeros_are_outliers')
+        self.inseq_stats = A('inseq_stats')
 
         # early on let's check some ground truth
         if not self.profile_db_path:
@@ -2191,40 +2323,23 @@ class ProfileSuperclass(object):
                                flaw, but THANKS for reminding anyway... The best way to address this is to make sure all anvi'o\
                                profile and pan databases maintain a table with all item names they are supposed to be working with.")
 
-        if self.p_meta['contigs_ordered'] and 'available_item_orders' in self.p_meta:
-            self.p_meta['available_item_orders'] = sorted([s.strip() for s in self.p_meta['available_item_orders'].split(',')])
-            self.item_orders = profile_db.db.get_table_as_dict(t.item_orders_table_name)
-
-            for item_order in self.item_orders:
-                if self.item_orders[item_order]['type'] == 'basic':
-                    try:
-                        self.item_orders[item_order]['data'] = self.item_orders[item_order]['data'].split(',')
-                    except:
-                        self.progress.end()
-                        raise ConfigError("Something is wrong with the basic order `%s` in this profile database :(" % (item_order))
-
-        elif self.p_meta['contigs_ordered'] and 'available_item_orders' not in self.p_meta:
-            self.progress.end()
-            self.run.warning("Your profile database thinks the hierarchical item_order was done, yet it contains no entries\
-                              for any hierarchical item_order results. This is not good. Something must have gone wrong\
-                              somewhere :/ To be on the safe side, anvi'o will assume this profile database has no\
-                              item_order (which is literally the case, by the way, it is just the database itself is\
-                              confused about that fact --it happens to the best of us).")
-            self.progress.new('Initializing the profile database superclass')
-
-            self.p_meta['contigs_ordered'] = False
-            self.p_meta['available_item_orders'] = None
-            self.p_meta['default_item_order'] = None
-            self.item_orders = None
+        # learn the number of mapped reads and set it in a nice variable
+        if self.p_meta['blank']:
+            self.num_mapped_reads_per_sample    = None
+        elif self.p_meta['merged']:
+            total_reads_mapped = [int(num_reads) for num_reads in self.p_meta['total_reads_mapped'].split(',')]
+            self.num_mapped_reads_per_sample = {self.p_meta['samples'][i]: total_reads_mapped[i] for i in range(0, len(self.p_meta['samples']))}
         else:
-            self.p_meta['available_item_orders'] = None
-            self.p_meta['default_item_order'] = None
-            self.item_orders = None
+            sample_name = self.p_meta['samples'][0]
+            keys, data = TableForLayerAdditionalData(self.args).get()
+            self.num_mapped_reads_per_sample = {sample_name: int(data[sample_name]['total_reads_mapped'])}
 
         profile_db.disconnect()
 
-        self.progress.update('Accessing the layers additional data')
-        self.layers_additional_data_keys, self.layers_additional_data = TableForLayerAdditionalData(argparse.Namespace(profile_db=self.profile_db_path)).get_all()
+        self.p_meta['available_item_orders'], self.item_orders = get_item_orders_from_db(self.profile_db_path)
+
+        if not self.item_orders:
+            self.p_meta['default_item_order'] = None
 
         self.progress.update('Accessing the auxiliary data file')
         self.auxiliary_data_path = get_auxiliary_data_path_for_profile_db(self.profile_db_path)
@@ -2235,10 +2350,22 @@ class ProfileSuperclass(object):
             self.split_coverage_values = auxiliarydataops.AuxiliaryDataForSplitCoverages(self.auxiliary_data_path,
                                                                                          self.p_meta['contigs_db_hash'])
 
+        if self.collection_name and self.bin_names and len(self.bin_names) == 1:
+            self.progress.update('Accessing the genes database')
+            self.genes_db_path = utils.get_genes_database_path_for_bin(self.profile_db_path,
+                                                                       self.collection_name,
+                                                                       self.bin_names[0])
+            if not os.path.exists(self.genes_db_path):
+                self.genes_db_available = False
+            else:
+                self.genes_db_available = True
+
         self.progress.end()
 
         if init_gene_coverages:
-            self.init_gene_level_coverage_stats_dicts(outliers_threshold=outliers_threshold, populate_nt_level_coverage=populate_nt_level_coverage, zeros_are_outliers=zeros_are_outliers)
+            self.init_gene_level_coverage_stats_dicts(outliers_threshold=outliers_threshold,
+                                                      zeros_are_outliers=zeros_are_outliers,
+                                                      init_split_coverage_values_per_nt=init_split_coverage_values_per_nt)
 
         if self.auxiliary_profile_data_available:
             self.run.info('Auxiliary Data', 'Found: %s (v. %s)' % (self.auxiliary_data_path, anvio.__auxiliary_data_version__))
@@ -2254,13 +2381,75 @@ class ProfileSuperclass(object):
                                                                                            anvio.__profile__version__))
 
 
-    def init_gene_level_coverage_stats_dicts(self, min_cov_for_detection=0, outliers_threshold=1.5, populate_nt_level_coverage=False, zeros_are_outliers=False, callback=None, callback_interval=100):
+    def create_blank_genes_database(self, split_names):
+        if self.genes_db_available:
+            raise ConfigError("You can't create a blank genes database when there is already one :/")
+
+        splits_hash = utils.get_hash_for_list(split_names)
+
+        meta_values = {'anvio': __version__,
+                       'contigs_db_hash': self.p_meta['contigs_db_hash'],
+                       'collection_name': self.collection_name,
+                       'bin_name': self.bin_names[0],
+                       'splits_hash': splits_hash}
+
+        # generate a blank genes database here:
+        GenesDatabase(self.genes_db_path).create(meta_values=meta_values)
+
+        # and immediately copy-paste the layers additional data and states table into
+        # it for convenience:
+        genes_database = db.DB(self.genes_db_path, None, ignore_version=True)
+        genes_database.copy_paste(table_name=t.layer_additional_data_table_name, source_db_path=self.profile_db_path)
+        genes_database.copy_paste(table_name=t.states_table_name, source_db_path=self.profile_db_path)
+        genes_database.disconnect()
+
+        # vamp the stage like a pro:
+        self.genes_db_available = True
+        self.genes_db_path = self.genes_db_path
+
+
+    def store_gene_level_coverage_stats_into_genes_db(self, parameters):
+        table_for_gene_level_coverages = TableForGeneLevelCoverages(self.genes_db_path,
+                                                                    parameters,
+                                                                    split_names=self.split_names_of_interest,
+                                                                    mode="INSEQ" if self.inseq_stats else "STANDARD",
+                                                                    run=self.run)
+
+        table_for_gene_level_coverages.store(self.gene_level_coverage_stats_dict)
+
+
+    def init_gene_level_coverage_stats_from_genes_db(self, parameters):
+        if not (self.collection_name and len(self.bin_names) == 1):
+            raise ConfigError("The function `get_gene_level_coverage_stats_dicts_for_a_bin` can only be called from an instance\
+                               of the profile super class that is initalized with a collection name and a single bin.")
+
+        table_for_gene_level_coverages = TableForGeneLevelCoverages(self.genes_db_path,
+                                                                    parameters,
+                                                                    split_names=self.split_names_of_interest,
+                                                                    mode="INSEQ" if self.inseq_stats else "STANDARD",
+                                                                    run=self.run)
+
+        self.gene_level_coverage_stats_dict = table_for_gene_level_coverages.read()
+
+
+    def init_gene_level_coverage_stats_dicts(self, min_cov_for_detection=0, outliers_threshold=1.5, zeros_are_outliers=False, callback=None, callback_interval=100, init_split_coverage_values_per_nt=False):
         """This function will populate both `self.split_coverage_values_per_nt_dict` and
            `self.gene_level_coverage_stats_dict`.
 
            Note: if a `split_names_of_interest` argument is declared at the class level,
            this function will operate on those splits found in that set.
+
+           If there is a collection and a single bin name, then this function will work with
+           the genes database to read form or to write to.
            """
+
+        # let's get these parameters set
+        parameters = {
+            'min_cov_for_detection': min_cov_for_detection,
+            'outliers_threshold': outliers_threshold,
+            'zeros_are_outliers': zeros_are_outliers,
+            'mode': 'INSEQ' if self.inseq_stats else 'STANDARD'
+        }
 
         if self.p_meta['blank']:
             self.run.warning("Someone asked gene coverages to be initialized when working with a blank profile database.\
@@ -2295,20 +2484,57 @@ class ProfileSuperclass(object):
 
             self.run.warning('A subset of splits (%d of %d, to be precise) are requested to initiate gene-level coverage stats for.\
                               No need to worry, this is just a warning in case you are as obsessed as wanting to know everything\
-                              there is to know.' % (len(self.split_names_of_interest), len(self.split_names)), overwrite_verbose=True)
-
+                              there is to know.' % (len(self.split_names_of_interest), len(self.split_names)))
         else:
             split_names = self.split_names
 
-        # we need to pass parameters to sub function as it is.
-        parameters = {
-            'min_cov_for_detection': min_cov_for_detection,
-            'outliers_threshold': outliers_threshold,
-            'populate_nt_level_coverage': populate_nt_level_coverage,
-            'zeros_are_outliers': zeros_are_outliers
-        }
+        if self.genes_db_path and self.genes_db_available:
+            # THIS IS A SPECIAL CASE, where someone is initializing the gene-level coverage
+            # stats for a single bin. In this case anvi'o will want to work with a genes
+            # database to read from, or to populate one for later uses. But the proplem is,
+            # we may be called from a part of the code that doesn't know what KIND of genes
+            # database is being called. Therefore, the `parameters` dict we are about to send
+            # to `init_gene_level_coverage_stats_from_genes_db` may contain the default
+            # `mode` value set before. BUT WE DON'T WANT THAT. 
+            mode_set_in_db = db.DB(self.genes_db_path, client_version=None, ignore_version=True).get_meta_value('mode')
 
-        self.progress.new('Computing gene-level coverage stats ...')
+            self.run.warning("A gene stats database of type '%s' is found (anvi'o hopes that this is the type of stats you\
+                              were expecting to find)." % mode_set_in_db.upper())
+
+            parameters['mode'] = mode_set_in_db 
+
+            # since we are here and learned the mode, we can also set the self.inseq_stats variable IF the table
+            # is actually inseq stats table. if we don't do this, the interactive interface will never load the inseq
+            # data because this variable is not set anywhere :/ the best practice would have been using a mode variable
+            # rather than an operation specific boolean flag, but well .. apologies to future generations of developers:
+            if mode_set_in_db == "INSEQ":
+                self.inseq_stats = True
+
+            self.init_gene_level_coverage_stats_from_genes_db(parameters)
+        elif self.genes_db_path and not self.genes_db_available:
+            self.run.warning("You don't seem to have a genes database associated with your profile database.\
+                              Genes database is an optional anvi'o database to store gene-level coverage and\
+                              stats dicts. Anvi'o will attempt to create one for you.", lc="cyan")
+            self.create_blank_genes_database(split_names)
+
+        if len(self.gene_level_coverage_stats_dict):
+            # FIXME: the design here is a fucking mess and needs a fresh look. we need split coverage per nt values initiated to
+            #        to calculate the gene-level coverage stats. but if we have a genes database, gene-level coverage stats are
+            #        already computed, so we don't need it .. but if we are using MCGC, even if we have gene-level coverage stats
+            #        available, we need split coverages per-nt recalculated... that's why we have a miserable variable now called
+            #        `init_split_coverage_values_per_nt`, when populating this disctionary should somehow be handled intrinsically
+            #        by our otherwise talented superclass. we really sort this out in a more beautiful way, in my opinion. otherwise
+            #        we will get stuck somwhere that will take forever to dig ourselves out.
+            if init_split_coverage_values_per_nt:
+                self.init_split_coverage_values_per_nt_dict(split_names)
+
+            # we have nothing to do here anymore. and can return.
+            return
+
+        # if we have not 'returned' yet it means we gotta go through this
+        self.init_split_coverage_values_per_nt_dict(split_names)
+
+        self.progress.new('Computing gene-level coverage stats in %s mode...' % ('INSEQ' if self.inseq_stats else 'STANDARD'))
         self.progress.update('...')
 
         num_splits, counter = len(split_names), 1
@@ -2317,7 +2543,6 @@ class ProfileSuperclass(object):
             if num_splits > 10 and counter % 10 == 0:
                 self.progress.update('%d of %d splits ...' % (counter, num_splits))
 
-            self.split_coverage_values_per_nt_dict[split_name] = self.split_coverage_values.get(split_name)
             self.gene_level_coverage_stats_dict.update(self.get_gene_level_coverage_stats(split_name, contigs_db, **parameters))
 
             if callback and counter % callback_interval == 0:
@@ -2325,14 +2550,148 @@ class ProfileSuperclass(object):
 
             counter += 1
 
+        self.progress.end()
+
         if callback:
             callback()
+        else:
+            if self.genes_db_path:
+                # we computed all the stuff, and we can as well store them into the genes db.
+                self.store_gene_level_coverage_stats_into_genes_db(parameters)
+
+
+    def init_split_coverage_values_per_nt_dict(self, split_names=None):
+        self.progress.new('Computing split coverage values per nt ...')
+        self.progress.update('...')
+
+        if not split_names:
+            split_names = self.split_names_of_interest
+
+        num_splits, counter = len(split_names), 1
+        for split_name in split_names:
+            if num_splits > 10 and counter % 10 == 0:
+                self.progress.update('%d of %d splits ...' % (counter, num_splits))
+
+            self.split_coverage_values_per_nt_dict[split_name] = self.split_coverage_values.get(split_name)
 
         self.progress.end()
 
+    def get_gene_level_coverage_stats_entry_for_default(self, gene_callers_id, split_coverage, sample_name, gene_start,
+        gene_stop, gene_length, outliers_threshold=1.5):
+        # and recover the gene coverage array per position for a given sample:
+
+        gene_coverage_values_per_nt = split_coverage[sample_name][gene_start:gene_stop]
+
+        mean_coverage = numpy.mean(gene_coverage_values_per_nt)
+        detection = numpy.count_nonzero(gene_coverage_values_per_nt) / gene_length
+
+         # findout outlier positions, and get non-outliers
+        outliers_bool = get_list_of_outliers(gene_coverage_values_per_nt, outliers_threshold)
+        non_outlier_positions = numpy.invert(outliers_bool)
+        non_outliers = gene_coverage_values_per_nt[non_outlier_positions]
+
+
+        if not (len(non_outliers)):
+            non_outlier_mean_coverage = 0.0
+            non_outlier_coverage_std = 0.0
+        else:
+            non_outlier_mean_coverage = numpy.mean(non_outliers)
+            non_outlier_coverage_std = numpy.std(non_outliers)
+
+        return {'gene_callers_id': gene_callers_id,
+                'sample_name': sample_name,
+                'mean_coverage': mean_coverage,
+                'detection': detection,
+                'non_outlier_mean_coverage': non_outlier_mean_coverage,
+                'non_outlier_coverage_std': non_outlier_coverage_std,
+                'gene_coverage_values_per_nt': gene_coverage_values_per_nt,
+                'non_outlier_positions': non_outlier_positions}
+
+
+    def get_gene_level_coverage_stats_entry_for_inseq(self, gene_callers_id, split_coverage, sample_name, gene_start,
+        gene_stop, gene_length, outliers_threshold=0.9):
+        # Lets ignore those pesty warnings...
+        numpy.seterr(divide='ignore', over='ignore')
+
+        total_read_counts_in_sample = self.num_mapped_reads_per_sample[sample_name]
+        gene_coverage_values_per_nt = split_coverage[sample_name][gene_start:gene_stop]
+
+        # INSEQ/Tn-SEQ views
+        mean_coverage = 0
+        #detection = numpy.count_nonzero(gene_coverage_values_per_nt) / gene_length
+        total_counts_of_sites_in_gene = 0
+        total_counts_of_sites_in_gene_normalized = 0
+        mean_three_prime = 0
+        below_threshold, over_threshold = 0, 0
+
+        # Split gene coverage values into splits that are nonzero
+        insertion_splits_nonzero = [numpy.array(list(g)) for k, g in itertools.groupby(gene_coverage_values_per_nt, lambda x: x != 0) if k]
+        if insertion_splits_nonzero:
+            for split in insertion_splits_nonzero:
+                ta_sites = scipy.signal.find_peaks(split)[0]
+
+                gene_sites_stats = list()
+                if ta_sites.any():
+                    # If we found high peaks, then we check if they are TA sites.
+                    for ta_index in ta_sites:
+                        index_highest_peak = numpy.where(gene_coverage_values_per_nt == split[ta_index])[0][0]
+                        value_highest_peak = gene_coverage_values_per_nt[index_highest_peak]
+
+                        # Need to check left and right indexes to see it part of TA site
+                        check_sites_dict = {gene_coverage_values_per_nt[index_highest_peak + 1]: index_highest_peak + 1,
+                                            gene_coverage_values_per_nt[index_highest_peak - 1]: index_highest_peak - 1}
+
+                        # Need to check left and right indexes to see it part of TA site
+                        value_second_highest_possible_peak = min(check_sites_dict.keys(), key=lambda x: abs(x - value_highest_peak))
+                        index_second_highest_possible_peak = check_sites_dict[value_second_highest_possible_peak]
+
+                        # Decide which one is left and right.
+                        if index_highest_peak > index_second_highest_possible_peak:
+                            index_left_ta, index_right_ta = index_second_highest_possible_peak, index_highest_peak
+                        elif index_highest_peak < index_second_highest_possible_peak:
+                            index_left_ta, index_right_ta = index_highest_peak, index_second_highest_possible_peak
+
+                        value_left_ta, value_right_ta = gene_coverage_values_per_nt[index_left_ta], gene_coverage_values_per_nt[index_right_ta]
+
+                        # Now, average left and right counts, and get three prime value.
+                        count_site_in_gene = (value_left_ta + value_right_ta) / 2
+                        three_prime = (index_right_ta + 1) / gene_length
+
+                        gene_sites_stats.append(
+                            {"l": index_left_ta, "r": index_right_ta, "l_value": value_left_ta, "r_value": value_right_ta, '3-primeness': three_prime,
+                             'count': count_site_in_gene})
+
+                        total_counts_of_sites_in_gene += count_site_in_gene
+
+                    # CPM math
+                    total_counts_of_sites_in_gene_normalized = (total_counts_of_sites_in_gene * 10e6) / total_read_counts_in_sample
+                    # Disruption in gene math
+                    mean_three_prime = numpy.mean(numpy.array([i['3-primeness'] for i in gene_sites_stats]))
+                    # Calculate the proportion of insertions that fell below the outlier threshold, important for knowing if insertions are effective
+                    below_threshold = round(sum([i["count"] for i in gene_sites_stats if i['3-primeness'] <= outliers_threshold])/total_counts_of_sites_in_gene * 100, 2)
+
+                # Didnt find any TA site :( life is sad
+                # Lets be sad and take the mean of whole split, whatever
+                else:
+                    pass
+                mean_coverage += numpy.mean(split)
+
+            # Check that counts are not too small... Think about dead bacteria that dont actually contribute to fitness.
+            if mean_coverage < 3:
+                mean_coverage = 0
+
+        return {'gene_callers_id': gene_callers_id,
+                'sample_name': sample_name,
+                'gene_coverage_values_per_nt': gene_coverage_values_per_nt,
+                'mean_coverage': float(mean_coverage),
+                'insertions': total_counts_of_sites_in_gene,
+                'insertions_normalized': total_counts_of_sites_in_gene_normalized,
+                'mean_disruption': mean_three_prime,
+                'below_disruption': below_threshold}
+
 
     def get_gene_level_coverage_stats(self, split_name, contigs_db, min_cov_for_detection=0, outliers_threshold=1.5,
-                                      populate_nt_level_coverage=False, zeros_are_outliers=False, gene_caller_ids_of_interest=set([])):
+                                      zeros_are_outliers=False, mode=None, gene_caller_ids_of_interest=set([])):
 
         # sanity check
         if not isinstance(gene_caller_ids_of_interest, set):
@@ -2377,33 +2736,22 @@ class ProfileSuperclass(object):
 
             # the magic happens here:
             for sample_name in self.p_meta['samples']:
-                # and recover the gene coverage array per position for a given sample:
-                gene_coverage_values_per_nt = split_coverage[sample_name][gene_start:gene_stop]
-
-                mean_coverage = numpy.mean(gene_coverage_values_per_nt)
-                detection = numpy.count_nonzero(gene_coverage_values_per_nt) / gene_length
-
-                # findout outlier psitions, and get non-outliers
-                outliers_bool = get_list_of_outliers(gene_coverage_values_per_nt, outliers_threshold)
-                non_outlier_positions = numpy.invert(outliers_bool)
-                non_outliers = gene_coverage_values_per_nt[non_outlier_positions]
-
-                if not(len(non_outliers)):
-                    non_outlier_mean_coverage = 0.0
-                    non_outlier_coverage_std = 0.0
+                if self.inseq_stats:
+                    output[gene_callers_id][sample_name] = self.get_gene_level_coverage_stats_entry_for_inseq(gene_callers_id=gene_callers_id,
+                        split_coverage=split_coverage,
+                        sample_name=sample_name,
+                        gene_start=gene_start,
+                        gene_stop=gene_stop,
+                        gene_length=gene_length,
+                        outliers_threshold=outliers_threshold)
                 else:
-                    non_outlier_mean_coverage = numpy.mean(non_outliers)
-                    non_outlier_coverage_std = numpy.std(non_outliers)
-
-                output[gene_callers_id][sample_name] = {'mean_coverage': mean_coverage,
-                                                         'detection': detection,
-                                                         'non_outlier_mean_coverage': non_outlier_mean_coverage,
-                                                         'non_outlier_coverage_std':  non_outlier_coverage_std}
-
-                # FIXME: these shouldn't be under gene_level_coverage_stats_dict see issue #688
-                if populate_nt_level_coverage == True:
-                    output[gene_callers_id][sample_name]['gene_coverage_values_per_nt'] = gene_coverage_values_per_nt
-                    output[gene_callers_id][sample_name]['non_outlier_positions'] = non_outlier_positions
+                    output[gene_callers_id][sample_name] = self.get_gene_level_coverage_stats_entry_for_default(gene_callers_id=gene_callers_id,
+                        split_coverage=split_coverage,
+                        sample_name=sample_name,
+                        gene_start=gene_start,
+                        gene_stop=gene_stop,
+                        gene_length=gene_length,
+                        outliers_threshold=outliers_threshold)
 
         return output
 
@@ -2601,7 +2949,7 @@ class ProfileDatabase:
             self.meta = dict([(k, meta_table[k]['value']) for k in meta_table])
 
             for key in ['min_contig_length', 'SNVs_profiled', 'SCVs_profiled', 'min_coverage_for_variability',
-                        'merged', 'blank', 'contigs_ordered', 'report_variability_full', 'num_contigs',
+                        'merged', 'blank', 'items_ordered', 'report_variability_full', 'num_contigs',
                         'num_splits', 'total_length']:
                 try:
                     self.meta[key] = int(self.meta[key])
@@ -2659,6 +3007,98 @@ class ProfileDatabase:
         self.db.disconnect()
 
 
+class GenesDatabase:
+    """To create an empty genes database and/or access one.
+
+       This is an optional database that is always linked to a profile database, collection
+       name, and a bin id. The purpose of it is to store coverage an detection statistics of
+       genes within a bin across samples desribed within a profile database.
+
+       Besides the performance gain during the initialization of gene coverage values, this
+       database serves as a way to store collections and states that are specific to the
+       '--gene-mode' operations"""
+
+    def __init__(self, db_path, run=run, progress=progress, quiet=True):
+        self.db = None
+        self.db_path = db_path
+
+        self.run = run
+        self.progress = progress
+        self.quiet = quiet
+
+        self.init()
+
+
+    def init(self):
+        if os.path.exists(self.db_path):
+            utils.is_genes_db(self.db_path)
+            self.db = db.DB(self.db_path, anvio.__genes__version__)
+            meta_table = self.db.get_table_as_dict('self')
+            self.meta = dict([(k, meta_table[k]['value']) for k in meta_table])
+
+            for key in ['min_cov_for_detection', 'zeros_are_outliers', 'gene_level_coverages_stored', 'items_ordered']:
+                try:
+                    self.meta[key] = int(self.meta[key])
+                except:
+                    pass
+
+            for key in ['outliers_threshold']:
+                try:
+                    self.meta[key] = float(self.meta[key])
+                except:
+                    pass
+
+            self.run.info('Genes database', 'An existing database, %s, has been initiated.' % self.db_path, quiet=self.quiet)
+        else:
+            self.db = None
+
+
+    def touch(self):
+        """Creates an empty genes database on disk, and sets `self.db` to access to it."""
+
+        is_db_ok_to_create(self.db_path, 'genes')
+
+        filesnpaths.gen_output_directory(os.path.dirname(self.db_path))
+
+        self.db = db.DB(self.db_path, anvio.__genes__version__, new_database=True)
+
+        # creating empty default tables
+        self.db.create_table(t.item_additional_data_table_name, t.item_additional_data_table_structure, t.item_additional_data_table_types)
+        self.db.create_table(t.item_orders_table_name, t.item_orders_table_structure, t.item_orders_table_types)
+        self.db.create_table(t.layer_additional_data_table_name, t.layer_additional_data_table_structure, t.layer_additional_data_table_types)
+        self.db.create_table(t.layer_orders_table_name, t.layer_orders_table_structure, t.layer_orders_table_types)
+        self.db.create_table(t.gene_level_coverage_stats_table_name, t.gene_level_coverage_stats_table_structure, t.gene_level_coverage_stats_table_types)
+        self.db.create_table(t.gene_level_inseq_stats_table_name, t.gene_level_inseq_stats_table_structure, t.gene_level_inseq_stats_table_types)
+        self.db.create_table(t.collections_info_table_name, t.collections_info_table_structure, t.collections_info_table_types)
+        self.db.create_table(t.collections_bins_info_table_name, t.collections_bins_info_table_structure, t.collections_bins_info_table_types)
+        self.db.create_table(t.collections_splits_table_name, t.collections_splits_table_structure, t.collections_splits_table_types)
+        self.db.create_table(t.collections_contigs_table_name, t.collections_contigs_table_structure, t.collections_contigs_table_types)
+        self.db.create_table(t.states_table_name, t.states_table_structure, t.states_table_types)
+
+        return self.db
+
+
+    def create(self, meta_values={}):
+        self.touch()
+
+        self.db.set_meta_value('db_type', 'genes')
+
+        for key in meta_values:
+            self.db.set_meta_value(key, meta_values[key])
+
+        self.db.set_meta_value('creation_date', time.time())
+        self.db.set_meta_value('gene_level_coverages_stored', False)
+        self.db.set_meta_value('items_ordered', False)
+
+        self.disconnect()
+
+        self.run.info('Genes database', 'A new database, %s, has been created.' % (self.db_path), quiet=self.quiet)
+
+
+    def disconnect(self):
+        self.db.disconnect()
+
+
 class PanDatabase:
     """To create an empty pan database, and/or access to one."""
     def __init__(self, db_path, run=run, progress=progress, quiet=True):
@@ -2680,7 +3120,7 @@ class PanDatabase:
             self.meta = dict([(k, meta_table[k]['value']) for k in meta_table])
 
             for key in ['num_genomes', 'gene_cluster_min_occurrence', 'use_ncbi_blast', 'diamond_sensitive', 'exclude_partial_gene_calls', \
-                        'num_gene_clusters', 'num_genes_in_gene_clusters', 'gene_alignments_computed', 'gene_clusters_ordered']:
+                        'num_gene_clusters', 'num_genes_in_gene_clusters', 'gene_alignments_computed', 'items_ordered']:
                 try:
                     self.meta[key] = int(self.meta[key])
                 except:
@@ -2701,19 +3141,10 @@ class PanDatabase:
         else:
             self.db = None
 
-
-    def create(self, meta_values={}):
+    def touch(self):
         is_db_ok_to_create(self.db_path, 'pan')
 
         self.db = db.DB(self.db_path, anvio.__pan__version__, new_database=True)
-
-        for key in meta_values:
-            self.db.set_meta_value(key, meta_values[key])
-
-        self.db.set_meta_value('creation_date', time.time())
-
-        # know thyself
-        self.db.set_meta_value('db_type', 'pan')
 
         # creating empty default tables for pan specific operations:
         self.db.create_table(t.pan_gene_clusters_table_name, t.pan_gene_clusters_table_structure, t.pan_gene_clusters_table_types)
@@ -2729,6 +3160,20 @@ class PanDatabase:
         self.db.create_table(t.collections_contigs_table_name, t.collections_contigs_table_structure, t.collections_contigs_table_types)
         self.db.create_table(t.collections_splits_table_name, t.collections_splits_table_structure, t.collections_splits_table_types)
         self.db.create_table(t.states_table_name, t.states_table_structure, t.states_table_types)
+
+        return self.db
+
+
+    def create(self, meta_values={}):
+        self.touch()
+
+        for key in meta_values:
+            self.db.set_meta_value(key, meta_values[key])
+
+        self.db.set_meta_value('creation_date', time.time())
+
+        # know thyself
+        self.db.set_meta_value('db_type', 'pan')
 
         self.disconnect()
 
@@ -2901,6 +3346,7 @@ class ContigsDatabase:
         external_gene_calls = A('external_gene_calls')
         skip_mindful_splitting = A('skip_mindful_splitting')
         ignore_internal_stop_codons = A('ignore_internal_stop_codons')
+        prodigal_translation_table = A('prodigal_translation_table')
 
         if external_gene_calls:
             filesnpaths.is_file_exists(external_gene_calls)
@@ -2908,6 +3354,11 @@ class ContigsDatabase:
         if external_gene_calls and skip_gene_calling:
             raise ConfigError("You provided a file for external gene calls, and used requested gene calling to be\
                                 skipped. Please make up your mind.")
+
+        if (external_gene_calls or skip_gene_calling) and prodigal_translation_table:
+            raise ConfigError("You asked anvi'o to %s, yet you set a specific translation table for prodigal. These\
+                               parameters do not make much sense and anvi'o is kindly asking you to make up your\
+                               mind." % ('skip gene calling' if skip_gene_calling else 'use external gene calls'))
 
         filesnpaths.is_file_fasta_formatted(contigs_fasta)
         contigs_fasta = os.path.abspath(contigs_fasta)
@@ -2978,10 +3429,11 @@ class ContigsDatabase:
         self.progress.end()
 
         all_ids_in_FASTA = utils.get_all_ids_from_fasta(contigs_fasta)
-        if len(all_ids_in_FASTA) != len(set(all_ids_in_FASTA)):
+        total_number_of_contigs = len(all_ids_in_FASTA)
+        if total_number_of_contigs != len(set(all_ids_in_FASTA)):
             raise ConfigError("Every contig in the input FASTA file must have a unique ID. You know...")
 
-        if not split_length:
+        if split_length is None:
             raise ConfigError("Creating a new contigs database requires split length information to be\
                                 provided. But the ContigsDatabase class was called to create one without this\
                                 bit of information. Not cool.")
@@ -3004,6 +3456,10 @@ class ContigsDatabase:
         if kmer_size < 2 or kmer_size > 8:
             raise ConfigError("We like our k-mer sizes between 2 and 8, sorry! (but then you can always change the\
                                 source code if you are not happy to be told what you can't do, let us know how it goes!).")
+
+        if split_length < kmer_size + 1:
+            raise ConfigError("Split size must be at least your k-mer size +1 (so in your case it can't be anything less\
+                               than %d)." % (kmer_size + 1))
 
         if skip_gene_calling:
             skip_mindful_splitting = True
@@ -3039,7 +3495,7 @@ class ContigsDatabase:
             # temporarily disconnect to perform gene calls
             self.db.disconnect()
 
-            gene_calls_tables = TablesForGeneCalls(self.db_path, contigs_fasta, run=self.run, progress=self.progress, debug=anvio.DEBUG)
+            gene_calls_tables = TablesForGeneCalls(self.db_path, contigs_fasta, args=args, run=self.run, progress=self.progress, debug=anvio.DEBUG)
 
             # if the user provided a file for external gene calls, use it. otherwise do the gene calling yourself.
             if external_gene_calls:
@@ -3073,9 +3529,11 @@ class ContigsDatabase:
         recovered_split_lengths = []
 
         # THE INFAMOUS GEN CONTGS DB LOOP (because it is so costly, we call it South Loop)
-        self.progress.new('The South Loop')
+        self.progress.new('The South Loop', progress_total_items=total_number_of_contigs)
         fasta.reset()
         while next(fasta):
+            self.progress.increment()
+
             contig_name = fasta.id
             contig_sequence = fasta.seq
 
@@ -3359,7 +3817,7 @@ def is_db_ok_to_create(db_path, db_type):
 
 
 def get_auxiliary_data_path_for_profile_db(profile_db_path):
-    return  os.path.join(os.path.dirname(profile_db_path), 'AUXILIARY-DATA.db')
+    return os.path.join(os.path.dirname(profile_db_path), 'AUXILIARY-DATA.db')
 
 
 def get_description_in_db(anvio_db_path, run=run):
@@ -3434,11 +3892,13 @@ def do_hierarchical_clustering_of_items(anvio_db_path, clustering_configs, split
                               run=run)
 
 
-def add_items_order_to_db(anvio_db_path, order_name, order_data, order_data_type_newick=True, distance=None, linkage=None, make_default=False, additional_data=None, run=run):
-    """Adds a new clustering into an anvi'o db
+def add_items_order_to_db(anvio_db_path, order_name, order_data, order_data_type_newick=True, distance=None,
+                          linkage=None, make_default=False, additional_data=None, dont_overwrite=False,
+                          check_names_consistency=False, run=run):
+    """Adds a new items order into an appropriate anvi'o db
 
        Here is a FIXME for future, smarter generations. This function should go away,
-       and its function should be handled by a new items_order class in tables/miscdata.
+       and what its doing should be handled by a new items_order class in tables/miscdata.
     """
 
     if order_data_type_newick and (not distance or not linkage):
@@ -3457,6 +3917,21 @@ def add_items_order_to_db(anvio_db_path, order_name, order_data, order_data_type
         order_name = ':'.join([order_name, distance, linkage])
     else:
         order_name = ':'.join([order_name, 'NA', 'NA'])
+
+    # check names consistency if the user asked for it
+    if check_names_consistency:
+        if order_data_type_newick:
+            names_in_data = sorted(utils.get_names_order_from_newick_tree(order_data))
+        else:
+            names_in_data = sorted([n.strip() for n in order_data.split(',')])
+
+        names_in_db = sorted(utils.get_all_item_names_from_the_database(anvio_db_path))
+
+        if names_in_db != names_in_data:
+            raise ConfigError("Ehem. There is something wrong with the incoming items order data here :/ Basically,\
+                               the names found in your input data does not match to the item names found in the\
+                               database. Anvi'o is too lazy to find out what exactly differs, but just so you know\
+                               you're doing something wrong :/")
 
     # additional data is JSON formatted entry
     # for now it will only contain collapsed node information.
@@ -3478,8 +3953,11 @@ def add_items_order_to_db(anvio_db_path, order_name, order_data, order_data_type
         available_item_orders = []
 
     if order_name in available_item_orders:
-        run.warning('Clustering for "%s" is already in the database. Its content will\
-                     be replaced with the new one.' % (order_name))
+        if dont_overwrite:
+            raise ConfigError("The order name '%s' is already in the database, and you are not allowed to overwrite that.\
+                               Probably it is time for you to come up with a new name?" % (order_name))
+        else:
+            run.warning('Clustering for "%s" is already in the database. It will be replaced with the new content.' % (order_name))
 
         anvio_db.db._exec('''DELETE FROM %s where name = "%s"''' % (t.item_orders_table_name, order_name))
     else:
@@ -3488,10 +3966,7 @@ def add_items_order_to_db(anvio_db_path, order_name, order_data, order_data_type
     anvio_db.db._exec('''INSERT INTO %s VALUES (?,?,?,?)''' % t.item_orders_table_name, tuple([order_name, 'newick' if order_data_type_newick else 'basic', order_data, additional_data]))
 
     anvio_db.db.set_meta_value('available_item_orders', ','.join(available_item_orders))
-
-    # We don't consider basic orders as orders becasue we are rebels.
-    if order_data_type_newick:
-        anvio_db.db.set_meta_value('gene_clusters_ordered' if db_type == 'pan' else 'contigs_ordered', True)
+    anvio_db.db.set_meta_value('items_ordered', True)
 
     try:
         anvio_db.db.get_meta_value('default_item_order')
@@ -3505,6 +3980,27 @@ def add_items_order_to_db(anvio_db_path, order_name, order_data, order_data_type
     anvio_db.disconnect()
 
     run.info('New items order', '"%s" (type %s) has been added to the database...' % (order_name, 'newick' if order_data_type_newick else 'basic'))
+
+
+def get_item_orders_from_db(anvio_db_path):
+    anvio_db = DBClassFactory().get_db_object(anvio_db_path)
+
+    utils.is_pan_or_profile_db(anvio_db_path, genes_db_is_also_accepted=True)
+
+    if not anvio_db.meta['items_ordered']:
+        return ([], {})
+
+    available_item_orders = sorted([s.strip() for s in anvio_db.meta['available_item_orders'].split(',')])
+    item_orders_dict = anvio_db.db.get_table_as_dict(t.item_orders_table_name)
+
+    for item_order in item_orders_dict:
+        if item_orders_dict[item_order]['type'] == 'basic':
+            try:
+                item_orders_dict[item_order]['data'] = item_orders_dict[item_order]['data'].split(',')
+            except:
+                raise ConfigError("Something is wrong with the basic order `%s` in this %s database :(" % (item_order, utils.get_db_type(anvio_db_path)))
+
+    return (available_item_orders, item_orders_dict)
 
 
 def get_default_item_order_name(default_item_order_requested, item_orders_dict, progress=progress, run=run):

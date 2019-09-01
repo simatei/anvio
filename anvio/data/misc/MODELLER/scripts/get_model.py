@@ -13,7 +13,6 @@ template_ids = tuple(["".join(x.strip().split("\t")) for x in open(TEMPLATE_IDS_
 
 from modeller import *
 from modeller.automodel import *    # Load the automodel class
-import os
 
 log.verbose()
 env = environ(rand_seed=-12312)
@@ -27,6 +26,8 @@ a = automodel(env,
               sequence=TARGET_ID,           # code of the target
               assess_methods=(assess.GA341,
                               assess.DOPE))
+
+a.set_output_model_format('PDB')
 
 # prepare for an extremely fast optimization
 if VERY_FAST:

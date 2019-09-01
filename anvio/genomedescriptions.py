@@ -64,12 +64,14 @@ class GenomeDescriptions(object):
 
 
     def names_check(self):
-        i, n = list(self.internal_genomes_dict.keys()), list(self.external_genomes_dict.keys())
+        i, n = list(self.internal_genomes_dict.keys() if self.internal_genomes_dict else []), \
+               list(self.external_genomes_dict.keys() if self.external_genomes_dict else [])
 
         if not i and not n:
-            raise ConfigError("You in fact tried to create a genomes storage file without providing any internal or external genome\
-                                descriptions! You got 5 anvi'o points for being awesome, but this is not gonna work since you really\
-                                need to provide at least one of those descriptions :/")
+            raise ConfigError("You actually managed to get all the way down here in the code without actually providing any internal\
+                               or external genome files! You got 5 anvi'o points for being awesome. But this is not gonna work since\
+                               you really need to provide at least one of those files so anvi'o takes away 4 of those points :/ The\
+                               anvi'o giveth, and the anvi'o taketh away. Enjoy your point.")
 
         if len(i) + len(n) != len(set(i + n)):
             raise ConfigError("Each entry both in internal and external genome descriptions should have a unique 'name'. This does not\
@@ -87,12 +89,17 @@ class GenomeDescriptions(object):
 
 
     def list_HMM_info_and_quit(self):
-        hmm_sources_in_all_genomes = self.get_HMM_sources_common_to_all_genomes(dont_raise=True)
+        hmm_sources_in_all_genomes = self.get_HMM_sources_common_to_all_genomes()
 
         # since we know hmm sources in `hmm_sources_in_all_genomes` are common to all genomes,
         # we could use any of those genomes to learn about the specifics of them. here we take
         # the first one from `self.genomes`
         hmm_sources_info = dbops.ContigsDatabase(list(self.genomes.values())[0]['contigs_db_path']).db.get_table_as_dict(t.hmm_hits_info_table_name)
+
+        if self.list_hmm_sources or self.list_available_gene_names:
+            if not len(hmm_sources_in_all_genomes):
+                raise ConfigError("There are no HMM sources among your external genomes that occur in every genome :/")
+
 
         if self.list_hmm_sources:
             self.run.warning(None, 'HMM SOURCES COMMON TO ALL %d GENOMES' % (len(self.genomes)), lc='yellow')
@@ -110,7 +117,7 @@ class GenomeDescriptions(object):
             sys.exit(0)
 
 
-    def get_HMM_sources_common_to_all_genomes(self, dont_raise=False):
+    def get_HMM_sources_common_to_all_genomes(self):
         """Returns True if all HMM sources in all genomes are comparable"""
 
         hmm_sources_info_per_genome = {}
@@ -137,12 +144,6 @@ class GenomeDescriptions(object):
             for hmm_source in hmm_sources_found:
                 if hmm_source not in hmm_sources_info_per_genome[genome_name] and hmm_source in hmm_sources_in_all_genomes:
                     hmm_sources_in_all_genomes.remove(hmm_source)
-
-        if not len(hmm_sources_in_all_genomes):
-            if dont_raise:
-                return None
-
-            raise ConfigError("There are no HMM sources among your external genomes that occur in every genome :/")
 
         return hmm_sources_in_all_genomes
 
@@ -181,10 +182,15 @@ class GenomeDescriptions(object):
 
         # add hashes for each genome in the self.genomes dict. this will allow us to see whether the HDF file already contains
         # all the information we need.
+        self.genome_hash_to_genome_name = {}
         for genome_name in self.external_genome_names:
-            self.genomes[genome_name]['genome_hash'] = self.get_genome_hash_for_external_genome(self.genomes[genome_name])
+            g_hash = self.get_genome_hash_for_external_genome(self.genomes[genome_name])
+            self.genomes[genome_name]['genome_hash'] = g_hash
+            self.genome_hash_to_genome_name[g_hash] = genome_name
         for genome_name in self.internal_genome_names:
-            self.genomes[genome_name]['genome_hash'] = self.get_genome_hash_for_internal_genome(self.genomes[genome_name])
+            g_hash = self.get_genome_hash_for_internal_genome(self.genomes[genome_name])
+            self.genomes[genome_name]['genome_hash'] = g_hash
+            self.genome_hash_to_genome_name[g_hash] = genome_name
 
         # if the client is not interested in functions, skip the rest.
         if skip_functions:
@@ -428,7 +434,9 @@ class GenomeDescriptions(object):
 
         if len(set([self.genomes[genome_name]['genome_hash'] for genome_name in self.internal_genome_names])) != len(self.internal_genome_names):
             raise ConfigError("Not all hash values are unique across internal genomes. This is almost impossible to happen unless something very\
-                                wrong with your workflow :/ Please let the developers know if you can't figure this one out")
+                               wrong with your workflow :/ It is most likely you managed to list the same information for different genome names.\
+                               Please double check whether you internal genomes file looks perfectly fine. If it does, then perhaps let the\
+                               developers know about the problem.")
 
         if not self.full_init:
             # if this is not full init, stop the sanity check here.

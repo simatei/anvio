@@ -21,6 +21,7 @@ __license__ = "GPL 3.0"
 __version__ = anvio.__version__
 __maintainer__ = "Mahmoud Yousef"
 __email__ = "mahmoudyousef@uchicago.edu"
+__description__ = "Compute homogeneity for gene clusters"
 
 
 run = terminal.Run()
@@ -102,7 +103,7 @@ def main(args):
 
     if args.store_in_db:
         args.just_do_it = True
-        miscdata.TableForItemAdditionalData(args).add(d, ['functional_homogeneity_index', 'geometric_homogeneity_index'])
+        miscdata.TableForItemAdditionalData(args).add(d, ['functional_homogeneity_index', 'geometric_homogeneity_index', 'combined_homogeneity_index'])
 
     if args.output_file:
         utils.store_dict_as_TAB_delimited_file(d, args.output_file)
@@ -110,7 +111,7 @@ def main(args):
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description="Compute homogeneity for gene clusters")
+    parser = argparse.ArgumentParser(description=__description__)
 
     groupA = parser.add_argument_group('INPUT FILES', "Input files from the pangenome analysis.")
     groupA.add_argument(*anvio.A('pan-db'), **anvio.K('pan-db'))
