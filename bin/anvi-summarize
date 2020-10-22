@@ -1,15 +1,8 @@
 #!/usr/bin/env python
 # -*- coding: utf-8
-"""Summarizer for anvi'o pan or profile db's.
+""""""
 
-   Essentially, this program takes a collection id along with either,
-
-   - a profile database and a contigs database
-   - or a pan database and a genomes storage
-
-   and generates a static HTML output for what is described in a given
-   collection."""
-
+import os
 import sys
 
 import anvio
@@ -30,14 +23,26 @@ __maintainer__ = "A. Murat Eren"
 __email__ = "a.murat.eren@gmail.com"
 __requires__ = ['profile-db', 'contigs-db', 'collection', 'pan-db', 'genomes-storage-db',]
 __provides__ = ['summary',]
-__description__ = "Summarize an anvi'o collection. Fun stuff."
-
+__description__ = ("Summarizer for anvi'o pan or profile db's. Essentially, this program takes a collection id along with either "
+                   "a profile database and a contigs database or a pan database and a genomes storage and generates a static HTML "
+                   "output for what is described in a given collection. The output directory will contain almost everything any "
+                   "downstream analysis may need, and can be displayed using a browser without the need for an anvi'o installation. "
+                   "For this reason alone, reporting summary outputs as supplementary data with publications is a great idea for "
+                   "transparency and reproducibility")
 
 run = terminal.Run()
 progress = terminal.Progress()
 
 
 def main(args):
+    # bad code but a good check early on. Due to multiple inheriteance downstream, there is actually no good
+    # place to perform this check before its too much CPU time has already passed (see #1430 for an actual
+    # user complaint):
+    A = lambda x: args.__dict__[x] if x in args.__dict__ else None
+    if A('output_dir') and not A('delete_output_directory_if_exists') and os.path.exists(A('output_dir')):
+        raise ConfigError("The output directory '%s' already exists and anvi'o is not prepared to remove it just because." % A('output_dir'))
+
+    # k, gud. lets move on with business.
     db_type = utils.get_db_type(args.pan_or_profile_db)
 
     if db_type == 'pan':
@@ -48,8 +53,8 @@ def main(args):
         profile_db = dbops.ProfileDatabase(args.profile_db)
 
         if not profile_db.meta['contigs_db_hash']:
-            raise ConfigError("This profile database is not affiliated with any contigs database. Anvi'o currently does not\
-                               summarize such stuff :/")
+            raise ConfigError("This profile database is not affiliated with any contigs database. Anvi'o currently does not "
+                              "summarize such stuff :/")
         profile_db.disconnect()
 
         if not args.contigs_db:
@@ -57,8 +62,8 @@ def main(args):
 
         summary = summarizer.ProfileSummarizer(args)
     else:
-        raise ConfigError("Well. '%s' is neither an anvi'o pan database, nor an anvi'o profile database. There is nothing this\
-                            program can't do for you if you feed it with the right stuff. Just sayin'" % args.pan_or_profile_db)
+        raise ConfigError("Well. '%s' is neither an anvi'o pan database, nor an anvi'o profile database. There is nothing this "
+                           "program can't do for you if you feed it with the right stuff. Just sayin'" % args.pan_or_profile_db)
 
     summary.process()
 
@@ -76,24 +81,40 @@ if __name__ == '__main__':
     groupC = parser.add_argument_group('STANDARD PROFILE SPECIFIC PARAMS', "Parameters that are only relevant to standard\
                                         profile summaries (declaring or not declaring them will not change anything if you\
                                         are summarizing a pan profile).")
-    groupD = parser.add_argument_group('COMMONS', "Common parameters for both pan and standard profile summaries.")
-    groupE = parser.add_argument_group('EXTRA', "Extra stuff because you're extra.")
+    groupD = parser.add_argument_group('PAN PROFILE SPECIFIC PARAMS', "Parameters that are only relevant to pan\
+                                        profile summaries (declaring or not declaring them will not change anything if you\
+                                        are summarizing a standard profile).")
+    groupE = parser.add_argument_group('COMMONS', "Common parameters for both pan and standard profile summaries.")
+    groupF = parser.add_argument_group('EXTRA', "Extra stuff because you're extra.")
 
     groupA.add_argument(*anvio.A('pan-or-profile-db'), **anvio.K('pan-or-profile-db'))
+
     groupB.add_argument(*anvio.A('contigs-db'), **anvio.K('contigs-db', {'required': False}))
     groupB.add_argument(*anvio.A('genomes-storage'), **anvio.K('genomes-storage', {'required': False}))
-    groupC.add_argument(*anvio.A('init-gene-coverages'), **anvio.K('init-gene-coverages'))
-    groupD.add_argument(*anvio.A('collection-name'), **anvio.K('collection-name'))
-    groupD.add_argument(*anvio.A('output-dir'), **anvio.K('output-dir'))
-    groupD.add_argument(*anvio.A('list-collections'), **anvio.K('list-collections'))
-    groupD.add_argument(*anvio.A('taxonomic-level'), **anvio.K('taxonomic-level'))
-    groupD.add_argument(*anvio.A('cog-data-dir'), **anvio.K('cog-data-dir'))
-    groupD.add_argument(*anvio.A('quick-summary'), **anvio.K('quick-summary'))
-    groupE.add_argument(*anvio.A('just-do-it'), **anvio.K('just-do-it'))
 
+    groupC.add_argument(*anvio.A('init-gene-coverages'), **anvio.K('init-gene-coverages'))
+    groupC.add_argument(*anvio.A('reformat-contig-names'), **anvio.K('reformat-contig-names'))
     groupC.add_argument('--report-aa-seqs-for-gene-calls', default=False, action='store_true', help="You can use this flag if\
-                                  you would like to find translated DNA sequences for your gene calls in the genes output\
-                                  file.")
+                                  you would like amino acid AND dna sequences for your gene calls in the genes output\
+                                  file. By default, only dna sequences are reported.")
+
+    groupD.add_argument(
+        *anvio.A('report-DNA-sequences'),
+        **anvio.K('report-DNA-sequences', {'help': anvio.K('report-DNA-sequences')['help'] + ' Also note, since gene clusters are \
+                                                   aligned via amino acid sequences, using this flag removes alignment information \
+                                                   manifesting in the form of gap characters (`-` characters) that would \
+                                                   be present if amino acid sequences were reported. Read the warnings during \
+                                                   runtime for more detailed information.'})
+    )
+
+    groupE.add_argument(*anvio.A('collection-name'), **anvio.K('collection-name'))
+    groupE.add_argument(*anvio.A('output-dir'), **anvio.K('output-dir'))
+    groupE.add_argument(*anvio.A('list-collections'), **anvio.K('list-collections'))
+    groupE.add_argument(*anvio.A('cog-data-dir'), **anvio.K('cog-data-dir'))
+    groupE.add_argument(*anvio.A('quick-summary'), **anvio.K('quick-summary'))
+
+    groupF.add_argument(*anvio.A('just-do-it'), **anvio.K('just-do-it'))
+
 
     args = anvio.get_args(parser)
 

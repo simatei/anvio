@@ -1,0 +1,42 @@
+---
+layout: page
+title: {{ artifact.name }} [artifact]
+categories: [anvio]
+comments: false
+image:
+  featurerelative: ../../../images/header.png
+  display: true
+---
+
+{% verbatim %}
+{% include _toc.html %}
+{% endverbatim %}
+
+<img src="{{artifact.icon}}" alt="{{ artifact.type }}" style="width:100px; border:none" />
+
+A {{ artifact.type }}-type anvi'o artifact. This artifact {% if artifact.provided_by_anvio and not artifact.provided_by_user %}is typically generated, used, and/or exported **by anvi'o** (and not provided by the user).{% elif not artifact.provided_by_anvio and artifact.provided_by_user %}is typically provided **by the user** for anvi'o to import into its databases, process, and/or use{% else %}can be generated, used, and/or exported **by anvi'o**. It can also be provided **by the user** for anvi'o to import into its databases, process, and/or use.{% endif %}.
+
+Back to the **[main page](../../)** of anvi'o programs and artifacts.
+
+## Provided by
+
+{% if artifact.provided_by %}
+<p style="text-align: left" markdown="1">{% for name, path in artifact.provided_by %}<span class="artifact-p">[{{name}}]({{path}}){% if forloop.last %}</span>{% else %}</span> {% endif %}{% endfor %}</p>
+{% else %}
+Most likely provided by the user.
+{% endif %}
+
+## Required or used by
+
+<p style="text-align: left" markdown="1">{% for name, path in artifact.required_by %}<span class="artifact-r">[{{name}}]({{path}}){% if forloop.last %}</span>{% else %}</span> {% endif %}{% endfor %}</p>
+
+## Description
+{% if artifact.description %}
+{{ artifact.description|safe }}
+
+{:.notice}
+Edit [this file](https://github.com/merenlab/anvio/tree/master/anvio/docs/artifacts/{{artifact.name}}.md) to update this information.
+{% else %}
+{:.notice}
+**No one has described this artifact yet** :/ If you would like to contribute by describing it, please see previous examples [here](https://github.com/merenlab/anvio/tree/master/anvio/docs/artifacts), and add a Markdown formatted file in that directory named "{{artifact.name}}.md". Its contents will replace this sad text. THANK YOU!
+{% endif %}

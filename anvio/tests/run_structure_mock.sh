@@ -8,6 +8,8 @@ make_structure_db() {
                                 --dump-dir test-output/RAW_MODELLER_OUTPUT \
                                 --output-db-path test-output/STRUCTURE.db \
                                 --very-fast \
+                                --debug \
+                                --num-threads 2 \
                                 --num-models 1
 }
 gen_var_profile1() {
@@ -29,14 +31,17 @@ gen_var_profile2() {
                                  -o test-output/variability_CDN.txt
 }
 display_structure1() {
-    anvi-display-structure -p test-output/SAMPLES-MERGED/PROFILE.db \
-                           -c test-output/one_contig_five_genes.db \
-                           -s test-output/STRUCTURE.db \
-                           --gene-caller-ids 2,4
+    anvi-3dev -p test-output/SAMPLES-MERGED/PROFILE.db \
+              -c test-output/one_contig_five_genes.db \
+              -s test-output/STRUCTURE.db \
+              --gene-caller-ids 2,4 \
+              --debug
 }
 display_structure2() {
-    anvi-display-structure -V test-output/variability_AA.txt \
-                           -s test-output/STRUCTURE.db
+    anvi-3dev -V test-output/variability_AA.txt \
+              -c test-output/one_contig_five_genes.db \
+              -s test-output/STRUCTURE.db \
+              --debug
 }
 
 
@@ -92,7 +97,7 @@ then
     done
 
     INFO "Merging all"
-    anvi-merge test-output/*PROFILE/PROFILE.db -c test-output/one_contig_five_genes.db -o test-output/SAMPLES-MERGED --skip-concoct-binning
+    anvi-merge test-output/*PROFILE/PROFILE.db -c test-output/one_contig_five_genes.db -o test-output/SAMPLES-MERGED
 
     INFO "Defining a collection and bin"
     anvi-import-collection mock_data_for_structure/collection.txt -c test-output/one_contig_five_genes.db -p test-output/SAMPLES-MERGED/PROFILE.db -C default
@@ -109,10 +114,10 @@ then
     INFO "anvi-gen-variability-profile --engine CDN"
     gen_var_profile2
 
-    INFO "anvi-display-structure with profile and contigs databases"
+    INFO "anvi-3dev with profile database"
     display_structure1
 
-    INFO "anvi-display-structure with variability"
+    INFO "anvi-3dev with variability"
     display_structure2
 
 
@@ -136,9 +141,16 @@ then
 
     rm -rf test-output/STRUCTURE.db
     rm -rf test-output/RAW_MODELLER_OUTPUT
+    rm -rf test-output/exported_pdbs
 
     INFO "anvi-gen-structure-database with DSSP"
     make_structure_db
+
+    INFO "anvi-update-structure-database"
+    anvi-update-structure-database -c test-output/one_contig_five_genes.db -s test-output/STRUCTURE.db --gene-caller-ids 2 --rerun
+
+    INFO "anvi-export-structures"
+    anvi-export-structures -o test-output/exported_pdbs -s test-output/STRUCTURE.db
 
     INFO "anvi-gen-variability-profile --engine AA"
     gen_var_profile1
@@ -146,10 +158,10 @@ then
     INFO "anvi-gen-variability-profile --engine CDN"
     gen_var_profile2
 
-    INFO "anvi-display-structure with profile and contigs databases"
+    INFO "anvi-3dev with profile database"
     display_structure1
 
-    INFO "anvi-display-structure with variability"
+    INFO "anvi-3dev with variability"
     display_structure2
 
     echo
@@ -180,10 +192,10 @@ then
     INFO "anvi-gen-variability-profile --engine CDN"
     gen_var_profile2
 
-    INFO "anvi-display-structure with profile and contigs databases"
+    INFO "anvi-3dev with profile and contigs databases"
     display_structure1
 
-    INFO "anvi-display-structure with variability"
+    INFO "anvi-3dev with variability"
     display_structure2
 
     echo

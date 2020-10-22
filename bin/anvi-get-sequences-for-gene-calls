@@ -21,9 +21,10 @@ __license__ = "GPL 3.0"
 __version__ = anvio.__version__
 __maintainer__ = "A. Murat Eren"
 __email__ = "a.murat.eren@gmail.com"
-__requires__ = ['contigs-db',]
+__requires__ = ['contigs-db', 'genomes-storage-db']
 __provides__ = ['genes-fasta',]
 __description__ = "A script to get back sequences for gene calls"
+__resources__ = [("A tutorial on getting gene-level taxonomy for a contigs-db", "http://merenlab.org/2016/06/18/importing-taxonomy/")]
 
 
 run = terminal.Run()
@@ -66,12 +67,12 @@ def main(args):
     output_file_path = A('output_file')
 
     if not contigs_db_path and not genomes_storage_db_path:
-        raise ConfigError("You must give this program either a contigs or a genomes storage database so it can like\
-                           export sequences for your genes? :/")
+        raise ConfigError("You must give this program either a contigs or a genomes storage database so it can like "
+                          "export sequences for your genes? :/")
 
     if contigs_db_path and genomes_storage_db_path:
-        raise ConfigError("You can either ask for sequences in a contigs database, or a genomes storage. But not both\
-                           (obviously).")
+        raise ConfigError("You can either ask for sequences in a contigs database, or a genomes storage. But not both "
+                          "(obviously).")
 
     if contigs_db_path:
         export_from_contigs(args)

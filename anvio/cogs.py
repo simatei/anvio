@@ -67,8 +67,8 @@ class COGs:
         self.available_search_methods = [p for p in self.search_methods_factory.keys() if utils.is_program_exists(p, dont_raise=True)]
 
         if not len(self.available_search_methods):
-            raise ConfigError("None of the serach methods this class could use, which include '%s', seem to be\
-                               available on your system :/" % (', '.join(list(self.search_methods_factory.keys()))))
+            raise ConfigError("None of the search methods this class could use, which include '%s', seem to be "
+                              "available on your system :/" % (', '.join(list(self.search_methods_factory.keys()))))
 
         if self.default_search_method not in self.available_search_methods:
             self.default_search_method = self.available_search_methods[0]
@@ -85,22 +85,22 @@ class COGs:
 
     def process(self, aa_sequences_file_path=None):
         if self.search_with not in self.available_search_methods:
-            raise ConfigError("Let us start by making it clear that we probably like '%s' as much as you do, but it doesn't\
-                               seem to be available on your system OR recognized by the COGs class since anvi'o couldn't\
-                               find it among the available search methods. You probably need to try something else :/" \
+            raise ConfigError("Let us start by making it clear that we probably like '%s' as much as you do, but it doesn't "
+                              "seem to be available on your system OR recognized by the COGs class since anvi'o couldn't "
+                              "find it among the available search methods. You probably need to try something else :/" \
                                                                                                     % self.search_with)
 
         if self.search_with not in self.available_db_search_program_targets:
-            raise ConfigError("Anvi'o understands that you want to use '%s' to search for COGs, however, there is no\
-                               database formatted under the COGs data directory for that program :/ You may need to\
-                               re-run the COGs setup (anvi-setup-ncbi-cogs), UNLESS, you set up your COG data directory \
-                               somewhere else than what anvi'o attempts to use at the moment ('%s'). If that is the case, \
-                               this may be the best time to point the right directory using the --cog-data-dir parameter, \
-                               or the environmental variable 'ANVIO_COG_DATA_DIR'." % (self.search_with, self.COG_data_dir))
+            raise ConfigError("Anvi'o understands that you want to use '%s' to search for COGs, however, there is no "
+                              "database formatted under the COGs data directory for that program :/ You may need to "
+                              "re-run the COGs setup (anvi-setup-ncbi-cogs), UNLESS, you set up your COG data directory "
+                              "somewhere else than what anvi'o attempts to use at the moment ('%s'). If that is the case, "
+                              "this may be the best time to point the right directory using the --cog-data-dir parameter, "
+                              "or the environmental variable 'ANVIO_COG_DATA_DIR'." % (self.search_with, self.COG_data_dir))
 
         if not aa_sequences_file_path and not self.contigs_db_path:
-            raise ConfigError("You either need to provide an anvi'o contigs database path, or a FASTA file for AA\
-                               sequences")
+            raise ConfigError("You either need to provide an anvi'o contigs database path, or a FASTA file for AA "
+                              "sequences")
 
         if aa_sequences_file_path and self.contigs_db_path:
             raise ConfigError("You can't provide both an AA sequences file and a contigs database. Choose one!")
@@ -115,8 +115,8 @@ class COGs:
             filesnpaths.is_file_exists(self.temp_dir_path)
             filesnpaths.is_output_dir_writable(self.temp_dir_path)
 
-            self.run.warning("Because you set the temporary directory path by hand, anvi'o will not remove its content\
-                              when it is done. But she certainly hopes that you will clean those files later.")
+            self.run.warning("Because you set the temporary directory path by hand, anvi'o will not remove its content "
+                             "when it is done. But she certainly hopes that you will clean those files later.")
 
             self.remove_temp_dir_path = False
 
@@ -125,8 +125,12 @@ class COGs:
         self.run.info('Directory to store temporary files', self.temp_dir_path)
         self.run.info('Directory will be removed after the run', self.remove_temp_dir_path)
 
+        
         if not aa_sequences_file_path:
-            aa_sequences_file_path = dbops.export_aa_sequences_from_contigs_db(self.contigs_db_path, J(self.temp_dir_path, 'aa_sequences.fa'))
+            aa_sequences_file_path = J(self.temp_dir_path, 'aa_sequences.fa')
+            dbops.ContigsSuperclass(self.args).gen_FASTA_file_of_sequences_for_gene_caller_ids(output_file_path=aa_sequences_file_path,
+                                                                                               report_aa_sequences=True,
+                                                                                               simple_headers=True)
 
         # do the search
         search_results_tabular = self.search_methods_factory[self.search_with](aa_sequences_file_path)
@@ -143,7 +147,10 @@ class COGs:
 
     def store_hits_into_contigs_db(self):
         if not self.hits:
-            self.run.warning("COGs class has no hits to process. Returning empty handed.")
+            self.run.warning("COGs class has no hits to process. Returning empty handed, but still adding COGs as "
+                             "functional sources.")
+            gene_function_calls_table = TableForGeneFunctions(self.contigs_db_path, self.run, self.progress)
+            gene_function_calls_table.add_empty_sources_to_functional_sources({'COG_FUNCTION', 'COG_CATEGORY'})
             return
 
         cogs_data = COGsData(self.args)
@@ -181,7 +188,8 @@ class COGs:
             COG_ids = cogs_data.p_id_to_cog_id[ncbi_protein_id]
 
             annotations = []
-            categories = set([])
+            categories = []
+            category_descriptions = []
             for COG_id in COG_ids:
                 # is missing?
                 if COG_id in cogs_data.missing_cogs:
@@ -191,7 +199,8 @@ class COGs:
 
                 # resolve categories
                 for category in cogs_data.cogs[COG_id]['categories']:
-                    categories.add(category)
+                    categories.append(category)
+                    category_descriptions.append(cogs_data.categories[category])
 
                 # append annotation
                 annotations.append(cogs_data.cogs[COG_id]['annotation'])
@@ -201,24 +210,24 @@ class COGs:
             # 9pm. Where am I? In the lab. Is it OK for me to let this slip away if it means for me to go home sooner? Yes, probably. Am I
             # gonna remember this crap in the code for the next two months at random times in the shower and feel bad about myself? Fuck yes.
             add_entry(gene_callers_id, 'COG_FUNCTION', '!!!'.join(COG_ids), '!!!'.join(annotations), self.hits[gene_callers_id]['evalue'])
-            add_entry(gene_callers_id, 'COG_CATEGORY', '!!!'.join(categories), '!!!'.join(categories), 0.0)
+            add_entry(gene_callers_id, 'COG_CATEGORY', '!!!'.join(categories), '!!!'.join(category_descriptions), 0.0)
 
         # store hits in contigs db.
         gene_function_calls_table = TableForGeneFunctions(self.contigs_db_path, self.run, self.progress)
         gene_function_calls_table.create(functions_dict)
 
         if len(missing_cogs_found):
-            self.run.warning('Although your COGs are successfully added to the database, there were some COG IDs your genes hit\
-                              were among the ones that were not described in the raw data. Here is the list of %d COG IDs that\
-                              were hit %d times: %s.' % (len(missing_cogs_found), hits_for_missing_cogs, ', '.join(missing_cogs_found)))
+            self.run.warning('Although your COGs are successfully added to the database, there were some COG IDs your genes hit '
+                             'were among the ones that were not described in the raw data. Here is the list of %d COG IDs that '
+                             'were hit %d times: %s.' % (len(missing_cogs_found), hits_for_missing_cogs, ', '.join(missing_cogs_found)))
 
         if len(missing_ncbi_protein_ids_found):
-            self.run.warning("Well. Your COGs were successfully added to the database, but there were some garbage anvi'o brushed\
-                              off under the rug. There were %d genes in your database that hit %d protein IDs in NCBIs COGs database,\
-                              but since NCBI did not release what COGs they correspond to in the database they made available (that\
-                              helps us to resolve protein IDs to COG ids), we could not annotate those genes with functions. Anvi'o\
-                              apologizes on behalf of all computer scientists for half-done stuff we often force biologists to deal\
-                              with. If you want to do some Googling, these were the offending protein IDs: '%s'." % \
+            self.run.warning("Well. Your COGs were successfully added to the database, but there were some garbage anvi'o brushed "
+                             "off under the rug. There were %d genes in your database that hit %d protein IDs in NCBIs COGs database, "
+                             "but since NCBI did not release what COGs they correspond to in the database they made available (that "
+                             "helps us to resolve protein IDs to COG ids), we could not annotate those genes with functions. Anvi'o "
+                             "apologizes on behalf of all computer scientists for half-done stuff we often force biologists to deal "
+                             "with. If you want to do some Googling, these were the offending protein IDs: '%s'." % \
                                         (hits_for_missing_ncbi_protein_ids, len(missing_ncbi_protein_ids_found), ', '.join([str(s) for s in missing_ncbi_protein_ids_found])))
 
         if len(in_proteins_FASTA_not_in_cogs_CSV):
@@ -233,10 +242,10 @@ class COGs:
 
             report_output.close()
 
-            self.run.warning("This is important. %s hits for your genes that appeared in the proteins FASTA file from the NCBI had protein\
-                              IDs that were not described in the CSV file from the NCBI that associates each protein ID with a COG function.\
-                              That's OK if you don't care. But if you would like to take a look, anvi'o stored a report\
-                              file for you at %s" \
+            self.run.warning("This is important. %s hits for your genes that appeared in the proteins FASTA file from the NCBI had protein "
+                             "IDs that were not described in the CSV file from the NCBI that associates each protein ID with a COG function. "
+                             "That's OK if you don't care. But if you would like to take a look, anvi'o stored a report "
+                             "file for you at %s" \
                         % (len(in_proteins_FASTA_not_in_cogs_CSV), report_output_file_path))
 
 
@@ -291,12 +300,12 @@ class COGsData:
         if self.essential_files:
             self.init()
         elif panic_on_failure_to_init:
-            raise ConfigError("It seems you don't have your COG data set up on this system. Whatever you were\
-                                trying to do is not going to continue being done :( Did you setup your COGs? If\
-                                not, you can take a look at the program `anvi-setup-ncbi-cogs`. Maybe you did\
-                                setup into another directory than the default destination? If that is the case\
-                                maybe you can use the `--cog-data-dir` parameter if it is applicable? No? None\
-                                of these work? Well. Anvi'o hates it as much as you do when things come to this.")
+            raise ConfigError("It seems you don't have your COG data set up on this system. Whatever you were "
+                               "trying to do is not going to continue being done :( Did you setup your COGs? If "
+                               "not, you can take a look at the program `anvi-setup-ncbi-cogs`. Maybe you did "
+                               "setup into another directory than the default destination? If that is the case "
+                               "maybe you can use the `--cog-data-dir` parameter if it is applicable? No? None "
+                               "of these work? Well. Anvi'o hates it as much as you do when things come to this.")
 
 
     def init(self):
@@ -419,9 +428,9 @@ class COGsSetup:
 
         for file_name in essential_files:
             if not os.path.exists(essential_files[file_name]):
-                raise ConfigError("At least one essential formatted file that is necesary for COG operations is not where it should\
-                                    be ('%s'). You should run COG setup, with the flag `--reset` if necessary, to make sure things\
-                                    are in order." % essential_files[file_name])
+                raise ConfigError("At least one essential formatted file that is necesary for COG operations is not where it should "
+                                   "be ('%s'). You should run COG setup, with the flag `--reset` if necessary, to make sure things "
+                                   "are in order." % essential_files[file_name])
 
         return essential_files
 
@@ -434,16 +443,16 @@ class COGsSetup:
                 os.mkdir(self.COG_data_dir)
                 open(self.COG_data_dir_version, 'w').write(COG_DATA_VERSION)
             except Exception as e:
-                raise ConfigError("So the COG data directory is not there, and anvi'o wants to create one. But it didn't\
-                                    go that well. It could be due to permissions (which may require you to run this with sudo\
-                                    or may need to ask your sys admin to do it for you since this is a one time operation), or\
-                                    it could be due to something totally irrelevant. Here is the error message: '%s'" % e)
+                raise ConfigError("So the COG data directory is not there, and anvi'o wants to create one. But it didn't "
+                                   "go that well. It could be due to permissions (which may require you to run this with sudo "
+                                   "or may need to ask your sys admin to do it for you since this is a one time operation), or "
+                                   "it could be due to something totally irrelevant. Here is the error message: '%s'" % e)
 
         filesnpaths.is_output_dir_writable(self.COG_data_dir)
 
         if self.reset:
-            run.warning('This program will remove everything in the COG data directory, then download and reformat\
-                         everything from scratch.')
+            run.warning('This program will remove everything in the COG data directory, then download and reformat '
+                        'everything from scratch.')
             self.wait_for_the_user()
 
             # OK. reset the crap out of it.
@@ -451,13 +460,13 @@ class COGsSetup:
             os.mkdir(self.COG_data_dir)
             open(self.COG_data_dir_version, 'w').write(COG_DATA_VERSION)
         else:
-            run.warning("This program will first check whether you have all the raw files, and then will attempt to\
-                         regenerate everything that is necessary from them.")
+            run.warning("This program will first check whether you have all the raw files, and then will attempt to "
+                        "regenerate everything that is necessary from them.")
             self.wait_for_the_user()
 
         if not os.path.exists(self.COG_data_dir_version) or open(self.COG_data_dir_version).read().strip() != COG_DATA_VERSION:
-            raise ConfigError("The version of your COG data directory is different than what anvi'o hoping to see.\
-                                It seems you need to (re)run anvi'o script to download and format COG data from NCBI.")
+            raise ConfigError("The version of your COG data directory is different than what anvi'o hoping to see. "
+                               "It seems you need to (re)run anvi'o script to download and format COG data from NCBI.")
 
         # get raw files
         self.get_raw_data()
@@ -473,10 +482,10 @@ class COGsSetup:
         missing_cog_ids = self.cogs_found_in_proteins_fasta.difference(self.cogs_found_in_cog_names_file)
 
         if len(missing_cog_ids):
-            self.run.warning("%d of %d COG IDs that appear in the list of orthology domains file (which links protein IDs\
-                              to COG names), are missing from the COG names file (which links COG IDs to function names and\
-                              categoires). Because clearly even the files that are distributed together should not be expected to\
-                              be fully compatible. Anvi'o thanks everyone for their contributions." % \
+            self.run.warning("%d of %d COG IDs that appear in the list of orthology domains file (which links protein IDs "
+                             "to COG names), are missing from the COG names file (which links COG IDs to function names and "
+                             "categoires). Because clearly even the files that are distributed together should not be expected to "
+                             "be fully compatible. Anvi'o thanks everyone for their contributions." % \
                                                         (len(missing_cog_ids), len(self.cogs_found_in_proteins_fasta)))
 
         dictio.write_serialized_object(missing_cog_ids, J(self.COG_data_dir, 'MISSING_COG_IDs.cPickle'))
@@ -553,8 +562,15 @@ class COGsSetup:
 
         # poor man's uncompress
         temp_fasta_path = filesnpaths.get_temp_file_path()
-        with open(temp_fasta_path, 'wb') as f_out, gzip.open(input_file_path, 'rb') as f_in:
-            f_out.write(f_in.read())
+        try:
+            with open(temp_fasta_path, 'wb') as f_out, gzip.open(input_file_path, 'rb') as f_in:
+                f_out.write(f_in.read())
+        except Exception as e:
+            progress.end()
+            raise ConfigError(f"Something went wrong while decompressing the downloaded file :/ It is likely that "
+                              f"the download failed and only part of the file was downloaded. If you would like to "
+                              f"try again, please run the setup command with the flag `--reset`. Here is what the "
+                              f"downstream library said: '{e}'.")
 
         progress.end()
 
@@ -575,8 +591,8 @@ class COGsSetup:
             diamond.run.log_file_path = log_file_path
             diamond.makedb(output_db_path)
         else:
-            self.run.warning("Diamond does not seem to be installed on this system, so anvi'o is not going to\
-                              generate a search database for it. Remember this when/if things go South.")
+            self.run.warning("Diamond does not seem to be installed on this system, so anvi'o is not going to "
+                             "generate a search database for it. Remember this when/if things go South.")
 
         if utils.is_program_exists('makeblastdb', dont_raise=True) and utils.is_program_exists('blastp', dont_raise=True):
             output_dir = J(self.COG_data_dir, 'DB_BLAST')
@@ -595,8 +611,8 @@ class COGsSetup:
             blast.num_threads = self.num_threads
             blast.makedb(os.path.join(output_db_path, 'COG.fa'))
         else:
-            self.run.warning("BLAST tools do not seem to be installed on this system, so anvi'o is not going to\
-                              generate a search database for them to be used. Keep this in mind for later.")
+            self.run.warning("BLAST tools do not seem to be installed on this system, so anvi'o is not going to "
+                             "generate a search database for them to be used. Keep this in mind for later.")
 
         os.remove(temp_fasta_path)
 
@@ -636,4 +652,3 @@ class COGsSetup:
             input("Press ENTER to continue, or press CTRL + C to cancel...\n")
         except:
             sys.exit()
-

@@ -2,13 +2,12 @@
 """Interface to MaxBin2."""
 import os
 import glob
-import shutil
 
 import anvio
 import anvio.utils as utils
 import anvio.terminal as terminal
-import anvio.filesnpaths as filesnpaths
 
+from anvio.errors import ConfigError
 
 __author__ = "Developers of anvi'o (see AUTHORS.txt)"
 __copyright__ = "Copyleft 2015-2019, the Meren Lab (http://merenlab.org/)"
@@ -51,10 +50,13 @@ class MaxBin2:
                  'help': "Minimum contig length. Default: 1000"}
                     ),
     }
+
     citation = "Yu-Wei Wu, Blake A. Simmons, Steven W. Singer, MaxBin 2.0: \
                 an automated binning algorithm to recover genomes from multiple \
                 metagenomic datasets, Bioinformatics, Volume 32, Issue 4, 15 February 2016,\
                 Pages 605–607, https://doi.org/10.1093/bioinformatics/btv638"
+
+    cluster_type = 'contig'
 
 
     def __init__(self, run=run, progress=progress):
@@ -65,36 +67,36 @@ class MaxBin2:
         utils.is_program_exists(self.program_name)
 
 
-    def cluster(self, input_files, args, threads=1, splits_mode=False):
-        self.run.info_single("If you publish results from this workflow, \
-                               please do not forget to cite \n%s" % MaxBin2.citation,
-                               nl_before=1, nl_after=1, mc='green')
+    def cluster(self, input_files, args, work_dir, threads=1, log_file_path=None):
+        J = lambda p: os.path.join(work_dir, p)
 
-        self.temp_path = filesnpaths.get_temp_directory_path()
+        output_file_prefix = J('MAXBIN_')
 
-        if anvio.DEBUG:
-            self.run.info('Working directory', self.temp_path)
-
-        bin_prefix = os.path.join(self.temp_path, 'Bin')
-        log_path = os.path.join(self.temp_path, 'logs.txt')
+        if not log_file_path:
+            log_file_path = J('logs.txt')
 
         cmd_line = [self.program_name,
-            '-contig', input_files.fasta, 
-            '-abund', input_files.coverage, 
-            '-out', bin_prefix,
+            '-contig', input_files.contigs_fasta,
+            '-abund', input_files.contig_coverages,
+            '-out', output_file_prefix,
             '-thread', str(threads),
             *utils.serialize_args(args, single_dash=True, use_underscore=True)]
 
 
         self.progress.new(self.program_name)
         self.progress.update('Running using %d threads...' % threads)
-        utils.run_command(cmd_line, log_path)
+        utils.run_command(cmd_line, log_file_path)
         self.progress.end()
+
+        output_file_paths = glob.glob(J(output_file_prefix + '*.fasta'))
+        if not len(output_file_paths):
+            raise ConfigError("Some critical output files are missing. Please take a look at the "
+                              "log file: %s" % (log_file_path))
 
         clusters = {}
         bin_count = 0
-        
-        for bin_file in glob.glob(bin_prefix + '*.fasta'):
+
+        for bin_file in output_file_paths:
             bin_count += 1
             with open(bin_file, 'r') as f:
                 bin_name = os.path.basename(bin_file).replace('.fasta', '')
@@ -106,10 +108,4 @@ class MaxBin2:
                     if line.startswith('>'):
                         clusters[bin_name].append(line[1:].strip())
 
-        self.run.info('Bins formed', bin_count)
-
-        if not anvio.DEBUG:
-            shutil.rmtree(self.temp_path)
-
         return clusters
-        

@@ -2,12 +2,12 @@
 """Interface to MetaBAT2."""
 import os
 import glob
-import shutil
 
 import anvio
 import anvio.utils as utils
 import anvio.terminal as terminal
-import anvio.filesnpaths as filesnpaths
+
+from anvio.errors import ConfigError
 
 
 __author__ = "Developers of anvi'o (see AUTHORS.txt)"
@@ -90,10 +90,14 @@ class MetaBAT2:
                  'help': "For exact reproducibility. (0: use random seed)."}
                     ),
     }
+
     citation = "Kang DD, Li F, Kirton E, Thomas A, Egan R, An H, Wang Z. 2019. \
                 MetaBAT 2: an adaptive binning algorithm for robust and efficient \
                 genome reconstruction from metagenome assemblies. \
                 PeerJ 7:e7359 https://doi.org/10.7717/peerj.7359"
+
+    cluster_type = 'contig'
+
 
     def __init__(self, run=run, progress=progress):
         self.run = run
@@ -103,21 +107,17 @@ class MetaBAT2:
         utils.is_program_exists(self.program_name)
 
 
-    def cluster(self, input_files, args, threads=1, splits_mode=False):
-        self.temp_path = filesnpaths.get_temp_directory_path()
-        self.run.info_single("If you publish results from this workflow, \
-                               please do not forget to cite \n%s" % MetaBAT2.citation,
-                               nl_before=1, nl_after=1, mc='green')
+    def cluster(self, input_files, args, work_dir, threads=1, log_file_path=None):
+        J = lambda p: os.path.join(work_dir, p)
 
-        if anvio.DEBUG:
-            self.run.info('Working directory', self.temp_path)
+        bin_prefix = J('METABAT_')
 
-        bin_prefix = os.path.join(self.temp_path, 'Bin')
-        log_path = os.path.join(self.temp_path, 'logs.txt')
+        if not log_file_path:
+            log_file_path = J('logs.txt')
 
         cmd_line = [self.program_name,
-            '-i', input_files.fasta, 
-            '-a', input_files.coverage, 
+            '-i', input_files.contigs_fasta,
+            '-a', input_files.contig_coverages,
             '-o', bin_prefix,
             '--cvExt',
             '-l',
@@ -126,21 +126,20 @@ class MetaBAT2:
 
         self.progress.new(self.program_name)
         self.progress.update('Running using %d threads...' % threads)
-        utils.run_command(cmd_line, log_path)
+        utils.run_command(cmd_line, log_file_path)
         self.progress.end()
+
+        output_file_paths = glob.glob(J(bin_prefix + '*'))
+        if not len(output_file_paths):
+            raise ConfigError("Some critical output files are missing. Please take a look at the "
+                              "log file: %s" % (log_file_path))
 
         clusters = {}
         bin_count = 0
-        for bin_file in glob.glob(bin_prefix + '*'):
+        for bin_file in output_file_paths:
             bin_count += 1
             with open(bin_file, 'r') as f:
                 pretty_bin_name = os.path.basename(bin_file).replace('.', '_')
                 clusters[pretty_bin_name] = list(map(str.strip, f.readlines()))
 
-        self.run.info('Bins formed', bin_count)
-
-        if not anvio.DEBUG:
-            shutil.rmtree(self.temp_path)
-
         return clusters
-        

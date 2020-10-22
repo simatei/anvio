@@ -19,7 +19,9 @@ __license__ = "GPL 3.0"
 __version__ = anvio.__version__
 __maintainer__ = "A. Murat Eren"
 __email__ = "a.murat.eren@gmail.com"
-__description__ = "Filter FASTA file according to BLAST table (remove sequences with bad BLAST alignment)."
+__provides__ = ["contigs-fasta"]
+__requires__ = ["contigs-fasta", "blast-table"]
+__description__ = "Filter FASTA file according to BLAST table (remove sequences with bad BLAST alignment)"
 
 
 run = terminal.Run()
@@ -55,9 +57,9 @@ def filter_FASTA_by_blast_results(args):
     cols = outfmt.split(" ")
     required_cols = ['qseqid', 'bitscore', 'length', 'qlen', 'pident']
     if len([c for c in required_cols if c not in cols]):
-        raise ConfigError("According to your `outfmt` parameter, columns in your BLAST output table\
-                           lack one or more important stuff. These columns must be present in your\
-                           output table (see help for details): %s." % ', '.join(required_cols))
+        raise ConfigError("According to your `outfmt` parameter, columns in your BLAST output table "
+                          "lack one or more important stuff. These columns must be present in your "
+                          "output table (see help for details): %s." % ', '.join(required_cols))
 
     filesnpaths.is_file_tab_delimited(blast_output_file_path, expected_number_of_fields=len(cols))
 

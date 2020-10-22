@@ -7,6 +7,7 @@ import anvio.tables as t
 import anvio.utils as utils
 import anvio.terminal as terminal
 
+from anvio.errors import ConfigError
 from anvio.tables.tableops import Table
 
 
@@ -36,18 +37,21 @@ class TableForGeneFunctions(Table):
 
         Table.__init__(self, self.db_path, anvio.__contigs__version__, run, progress)
 
-        self.set_next_available_id(t.gene_function_calls_table_name)
 
-
-    def create(self, functions_dict, drop_previous_annotations_first = False):
-        self.sanity_check()
-
-        # incoming stuff:
-        gene_function_sources = set([v['source'] for v in list(functions_dict.values())])
-        unique_num_genes = len(set([v['gene_callers_id'] for v in list(functions_dict.values())]))
-
-        # oepn connection
+    def add_empty_sources_to_functional_sources(self, gene_function_sources):
+        if type(gene_function_sources) is not set:
+            raise ConfigError('The programmer who called this function forgot that gene_function_sources must be of '
+                              'type %s. If this is not your falut, please contact an anvi\'o developer.' % set)
+        # open connection
         database = db.DB(self.db_path, utils.get_required_version_for_db(self.db_path))
+
+        self.add_new_sources_to_functional_sources(gene_function_sources, database)
+
+        # disconnect like a pro.
+        database.disconnect()
+
+
+    def add_new_sources_to_functional_sources(self, gene_function_sources, database, drop_previous_annotations_first=False):
 
         # are there any previous annotations in the db:
         gene_function_sources_in_db = database.get_meta_value('gene_function_sources')
@@ -66,14 +70,13 @@ class TableForGeneFunctions(Table):
 
         elif gene_function_sources_in_db and drop_previous_annotations_first:
             # there are gene calls, but the user wants everything to be dropeped.
-            self.run.warning("As per your request, anvi'o is DROPPING all previous function calls from %d sources\
-                              before adding the incoming data, which contains %d entries originating from %d sources: %s" \
-                                    % (len(gene_function_sources_in_db), len(functions_dict),
+            self.run.warning("As per your request, anvi'o is DROPPING all previous function calls from %d sources "
+                             "before adding the incoming data, which contains %d entries originating from %d sources: %s" \
+                                    % (len(gene_function_sources_in_db), len(gene_function_sources),
                                        len(gene_function_sources), ', '.join(gene_function_sources)))
 
-            # clean the table and reset the next available ids
+            # clean the table
             database._exec('''DELETE FROM %s''' % (t.gene_function_calls_table_name))
-            self.reset_next_available_id_for_table(t.gene_function_calls_table_name)
 
             # set the sources
             database.remove_meta_key_value_pair('gene_function_sources')
@@ -81,8 +84,8 @@ class TableForGeneFunctions(Table):
 
         elif gene_function_sources_in_db and gene_function_sources_both_in_db_and_incoming_dict:
             # some of the functions in the incoming dict match to what is already in the db. remove
-            self.run.warning("Some of the annotation sources you want to add into the database are already in the db. So\
-                              anvi'o will REPLACE those with the incoming data from these sources: %s" % \
+            self.run.warning("Some of the annotation sources you want to add into the database are already in the db. So "
+                             "anvi'o will REPLACE those with the incoming data from these sources: %s" % \
                                             ', '.join(gene_function_sources_both_in_db_and_incoming_dict))
 
             # remove those entries for matching sources:
@@ -99,20 +102,32 @@ class TableForGeneFunctions(Table):
             database.remove_meta_key_value_pair('gene_function_sources')
             database.set_meta_value('gene_function_sources', ','.join(list(gene_function_sources_in_db.union(gene_function_sources))))
 
+
+    def create(self, functions_dict, drop_previous_annotations_first=False):
+        self.sanity_check()
+
+        # open connection
+        database = db.DB(self.db_path, utils.get_required_version_for_db(self.db_path))
+
+        # Add the new sources to existing sources
+        gene_function_sources = set([v['source'] for v in list(functions_dict.values())])
+        self.add_new_sources_to_functional_sources(gene_function_sources, database, drop_previous_annotations_first=drop_previous_annotations_first)
+
+        unique_num_genes = len(set([v['gene_callers_id'] for v in list(functions_dict.values())]))
+
+
         # push the data
-        db_entries = [tuple([self.next_id(t.gene_function_calls_table_name)] + [functions_dict[v][h] for h in t.gene_function_calls_table_structure[1:]]) for v in functions_dict]
-        database._exec_many('''INSERT INTO %s VALUES (?,?,?,?,?,?)''' % t.gene_function_calls_table_name, db_entries)
+        db_entries = [tuple([functions_dict[v][h] for h in t.gene_function_calls_table_structure]) for v in functions_dict]
+        database._exec_many('''INSERT INTO %s VALUES (?,?,?,?,?)''' % t.gene_function_calls_table_name, db_entries)
 
         # disconnect like a pro.
         database.disconnect()
 
-        self.run.info('Gene functions', '%d function calls from %d sources for %d unique gene calls has\
-                                        been added to the contigs database.' % \
-                                            (len(functions_dict), len(gene_function_sources), unique_num_genes))
+        sources_string = ", ".join(gene_function_sources)
+        self.run.info('Gene functions', f"{len(functions_dict)} function calls from {len(gene_function_sources)} sources ({sources_string}) "
+                                        f"for {unique_num_genes} unique gene calls has\
+                                         been added to the contigs database.")
 
 
     def sanity_check(self):
         pass
-
-
-

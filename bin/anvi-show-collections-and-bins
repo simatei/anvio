@@ -20,7 +20,8 @@ __license__ = "GPL 3.0"
 __version__ = anvio.__version__
 __maintainer__ = "A. Murat Eren"
 __email__ = "a.murat.eren@gmail.com"
-__description__ = "A script to display collections stored in an anvi'o profile or pan database."
+__requires__ = ["pan-db", "profile-db"]
+__description__ = "A script to display collections stored in an anvi'o profile or pan database"
 
 
 run = terminal.Run()
@@ -37,10 +38,10 @@ def main(args):
     progress.end()
 
     if not collections.collections_dict:
-        raise ConfigError("There are no collections in this profile database. Consider making some\
-                           in interactive mode, or importing a collection with\
-                           `anvi-import-collection` (a tutorial on importing collections here:\
-                           http://merenlab.org/2016/06/22/anvio-tutorial-v2/#anvi-import-collection)")
+        raise ConfigError("There are no collections in this profile database. Consider making some "
+                          "in interactive mode, or importing a collection with "
+                          "`anvi-import-collection` (a tutorial on importing collections here: "
+                          "http://merenlab.org/2016/06/22/anvio-tutorial-v2/#anvi-import-collection)")
 
     for source in collections.collections_dict:
         run.warning('', header = 'Collection: "%s"' % source, lc = 'green')

@@ -20,8 +20,8 @@ __license__ = "GPL 3.0"
 __version__ = anvio.__version__
 __maintainer__ = "A. Murat Eren"
 __email__ = "a.murat.eren@gmail.com"
-__requires__ = ['genes-db', 'pan-db', 'profile-db']
-__provides__ = ['misc-data-item-orders-txt', 'dendrogram', 'phylogeny']
+__requires__ = ['pan-db', 'profile-db']
+__provides__ = ['misc-data-items-order-txt', 'dendrogram', 'phylogeny']
 __description__ = "Export an item order from an anvi'o database"
 
 run = terminal.Run()
@@ -63,8 +63,8 @@ def main(args):
             items_order_of_interest = item_orders_dict[item_order]
 
     if not items_order_of_interest:
-        raise ConfigError("The item order '%s' is not one of the item orders in the database. This what you\
-                           have in there: '%s'." % (order_name, ', '.join(item_order_names_raw)))
+        raise ConfigError("The item order '%s' is not one of the item orders in the database. This what you "
+                          "have in there: '%s'." % (order_name, ', '.join(item_order_names)))
 
     order_data_type_newick = items_order_of_interest['type'] == 'newick'
     run.info("Database", db_path)

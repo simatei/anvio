@@ -20,8 +20,7 @@ anvi-script-reformat-fasta $files/contigs.fa -o $output_dir/contigs.fa \
                                              --simplify-names \
                                              --prefix test_prefix \
                                              --report $output_dir/contigs-reformat-report.txt
-echo
-column -t $output_dir/contigs-reformat-report.txt
+SHOW_FILE $output_dir/contigs-reformat-report.txt
 
 # we first generate an empty contigs database using contigs.fa (keep in mind that 'contigs.fa'
 # is the original file all samples were mapped to). here we use split size of 1000 (the default split
@@ -51,6 +50,7 @@ anvi-db-info $output_dir/CONTIGS.db \
 
 INFO "Exporting gene calls from the contigs database"
 anvi-export-gene-calls -c $output_dir/CONTIGS.db \
+                       --gene-caller prodigal \
                        -o $output_dir/exported_gene_calls.txt
 
 INFO "Exporting contig sequences from the contigs database"
@@ -81,7 +81,8 @@ anvi-run-hmms -c $output_dir/CONTIGS.db \
 
 INFO "Rerunning HMMs for a specific installed profile"
 anvi-run-hmms -c $output_dir/CONTIGS.db \
-              -I Ribosomal_RNAs
+              -I Ribosomal_RNAs \
+              --just-do-it
 
 INFO "Listing all available HMM sources in the contigs database"
 anvi-delete-hmms -c $output_dir/CONTIGS.db \
@@ -95,9 +96,17 @@ INFO "Export genomic locus using HMM"
 anvi-export-locus -c $output_dir/CONTIGS.db \
                   -O $output_dir/exported_locus_from_hmm \
                   -n 22,22 \
-                  -s S-AdoMet_synt_C \
+                  -s RNA_pol_Rpb6 \
                   --use-hmm \
-                  --hmm-sources Bacteria_71 
+                  --hmm-sources Bacteria_71
+
+INFO "Export genomic locus using HMM (multiple, only 1 expected hit)"
+anvi-export-locus -c $output_dir/CONTIGS.db \
+                  -O $output_dir/exported_locus_from_hmm_multi \
+                  -n 22,22 \
+                  -s RNA_pol_Rpb6,fake_gene \
+                  --use-hmm \
+                  --hmm-sources Bacteria_71
 
 INFO "Recovering completeness esimates for the contigs db"
 anvi-compute-completeness -c $output_dir/CONTIGS.db
@@ -123,21 +132,32 @@ anvi-export-functions -c $output_dir/CONTIGS.db \
 INFO "Export all functional annotations"
 anvi-export-functions -c $output_dir/CONTIGS.db \
                       -o $output_dir/exported_functions_from_all_sources.txt
-echo
-head $output_dir/exported_functions_from_all_sources.txt | tr ' ' @@ | column -t | tr @@ ' '
 
 INFO "Export genomic locus using functional annotation search"
 anvi-export-locus -c $output_dir/CONTIGS.db \
                   -O $output_dir/exported_locus_from_functions \
                   -n 22,22 \
-                  -s NusB
+                  -s NusB \
+                  --overwrite-output-destinations
+
+INFO "Export genomic locus using functional annotation search (multiple; 2 expected)"
+anvi-export-locus -c $output_dir/CONTIGS.db \
+                  -O $output_dir/exported_locus_from_functions \
+                  -n 22,22 \
+                  -s NusB,'Glutamine amidotransferase class-I' \
+                  --overwrite-output-destinations
+
+INFO "Export genomic locus using functional annotation search in flank-mode"
+anvi-export-locus -c $output_dir/CONTIGS.db \
+                  -O $output_dir/exported_locus_from_functions \
+                  --flank-mode  \
+                  -s NusB,rpoz \
+                  --overwrite-output-destinations
 
 INFO "Export only Pfam annotations"
 anvi-export-functions -c $output_dir/CONTIGS.db \
                       -o $output_dir/exported_functions_from_source_Pfam.txt \
                       --annotation-sources Pfam
-echo
-head $output_dir/exported_functions_from_source_Pfam.txt | tr ' ' @@ | column -t | tr @@ ' '
 
 INFO "Contigs DB is ready; here are the tables in it:"
 sqlite3 $output_dir/CONTIGS.db '.tables'
@@ -311,9 +331,7 @@ anvi-rename-bins -c $output_dir/CONTIGS.db \
                  --collection-to-write "cmdline_concoct_RENAMED" \
                  --report-file $output_dir/renaming-report.txt
 
-echo
-column -t $output_dir/renaming-report.txt
-echo
+SHOW_FILE $output_dir/renaming-report.txt
 
 INFO "Requesting collection info"
 anvi-estimate-genome-completeness -p $output_dir/SAMPLES-MERGED/PROFILE.db \
@@ -325,7 +343,16 @@ anvi-summarize -p $output_dir/SAMPLES-MERGED/PROFILE.db \
                -c $output_dir/CONTIGS.db \
                -o $output_dir/SAMPLES-MERGED-SUMMARY \
                -C 'cmdline_concoct_RENAMED' \
-               --init-gene-coverages
+               --init-gene-coverages \
+               --reformat-contig-names
+
+INFO "Run quick summary of CONCOCT results"
+anvi-summarize -p $output_dir/SAMPLES-MERGED/PROFILE.db \
+               -c $output_dir/CONTIGS.db \
+               -o $output_dir/SAMPLES-MERGED-SUMMARY-QUICK \
+               -C 'cmdline_concoct_RENAMED' \
+               --reformat-contig-names \
+               --quick-summary
 
 INFO "Generate a SNV variabilty profile for PSAMPLES_Bin_00001 using a collection id"
 anvi-gen-variability-profile -c $output_dir/CONTIGS.db \
@@ -374,20 +401,6 @@ anvi-gen-gene-level-stats-databases -c $output_dir/CONTIGS.db \
                                     -b EVERYTHING \
                                     --inseq-stats
 
-INFO "Generating amino acid frequencies for gene caller id 3 in SAMPLE-01.bam"
-anvi-get-codon-frequencies -b $output_dir/SAMPLE-01.bam \
-                           -c $output_dir/CONTIGS.db \
-                           --gene-caller-id 3 \
-                           -o $output_dir/CODON_frequencies_for_gene_caller_id_3.txt
-
-INFO "Generating amino codon frequencies for gene caller id 3 in SAMPLE-01.bam"
-anvi-get-codon-frequencies -b $output_dir/SAMPLE-01.bam \
-                           -c $output_dir/CONTIGS.db \
-                           --gene-caller-id 3 \
-                           -o $output_dir/AA_frequencies_for_gene_caller_id_3.txt \
-                           --percent-normalize \
-                           --return-AA-frequencies-instead
-
 INFO "Generating normalized codon frequencies for all genes in the contigs database"
 anvi-get-codon-frequencies -c $output_dir/CONTIGS.db \
                            -o $output_dir/CODON_frequencies_for_the_contigs_db.txt \
@@ -414,6 +427,12 @@ INFO "Export gene coverage and detection data"
 anvi-export-gene-coverage-and-detection -p $output_dir/SAMPLES-MERGED/PROFILE.db \
                                         -c $output_dir/CONTIGS.db \
                                         -O $output_dir/MERGED
+
+INFO "Export gene coverage and detection data for a single gene"
+anvi-export-gene-coverage-and-detection -p $output_dir/SAMPLES-MERGED/PROFILE.db \
+                                        -c $output_dir/CONTIGS.db \
+                                        --gene-caller-id 1 \
+                                        -O $output_dir/MERGED-GENE-01
 
 INFO "Show all available HMM sources"
 anvi-get-sequences-for-hmm-hits -c $output_dir/CONTIGS.db \
@@ -472,7 +491,7 @@ anvi-export-misc-data -p $output_dir/SAMPLES-MERGED/PROFILE.db \
 INFO "Remove a single data key from items additional data"
 anvi-delete-misc-data -p $output_dir/SAMPLES-MERGED/PROFILE.db \
                       --target-data-table items \
-                      --keys "Özcan's_column"
+                      --keys "test_column"
 
 INFO "Remove all data in items additional data"
 anvi-delete-misc-data -p $output_dir/SAMPLES-MERGED/PROFILE.db \
@@ -510,14 +529,14 @@ anvi-get-short-reads-mapping-to-a-gene -c $output_dir/CONTIGS.db \
 INFO "Get AA counts for the entire contigs database"
 anvi-get-aa-counts -c $output_dir/CONTIGS.db \
                    -o $output_dir/aa_counts_for_contigs_db.txt
-column -t $output_dir/aa_counts_for_contigs_db.txt
+SHOW_FILE $output_dir/aa_counts_for_contigs_db.txt
 
 INFO "Get AA counts for bins in collection CONCOCT stored in the merged profile"
 anvi-get-aa-counts -c $output_dir/CONTIGS.db \
                    -p $output_dir/SAMPLES-MERGED/PROFILE.db \
                    -C CONCOCT \
                    -o $output_dir/aa_counts_for_bins_in_collection_CONCOCT.txt
-column -t $output_dir/aa_counts_for_bins_in_collection_CONCOCT.txt
+SHOW_FILE $output_dir/aa_counts_for_bins_in_collection_CONCOCT.txt
 
 INFO "Get AA counts for bin 'bin_3' in collection CONCOCT stored in the merged profile"
 anvi-get-aa-counts -c $output_dir/CONTIGS.db \
@@ -525,19 +544,19 @@ anvi-get-aa-counts -c $output_dir/CONTIGS.db \
                    -C CONCOCT \
                    -o $output_dir/aa_counts_for_bin_3_in_collection_CONCOCT.txt \
                    -B $files/sample_CONCOCT_bin_id.txt
-column -t $output_dir/aa_counts_for_bin_3_in_collection_CONCOCT.txt
+SHOW_FILE $output_dir/aa_counts_for_bin_3_in_collection_CONCOCT.txt
 
 INFO "Get AA counts for bin 'bin_3' in collection CONCOCT stored in the merged profile"
 anvi-get-aa-counts -c $output_dir/CONTIGS.db \
                    --contigs-of-interest $files/sample_contig_ids.txt \
                    -o $output_dir/aa_counts_for_two_contigs.txt
-column -t $output_dir/aa_counts_for_two_contigs.txt
+SHOW_FILE $output_dir/aa_counts_for_two_contigs.txt
 
 INFO "Get AA counts for five genes"
 anvi-get-aa-counts -c $output_dir/CONTIGS.db \
                    --gene-caller-ids $files/sample_gene_call_ids.txt \
                    -o $output_dir/aa_counts_for_five_genes.txt
-column -t $output_dir/aa_counts_for_five_genes.txt
+SHOW_FILE $output_dir/aa_counts_for_five_genes.txt
 
 INFO "Importing a state file into the merged profile"
 anvi-import-state -p $output_dir/SAMPLES-MERGED/PROFILE.db \
@@ -591,10 +610,76 @@ anvi-mcg-classifier -p $output_dir/SAMPLES-MERGED/PROFILE.db \
                     -C CONCOCT \
                     -b Bin_1 \
                     --exclude-samples $files/samples_to_exclude_for_mcg.txt
-# 
-# INFO "Running anvi-mcg-classifier on a collection"
-# anvi-mcg-classifier -p $output_dir/SAMPLES-MERGED/PROFILE.db -c $output_dir/CONTIGS.db -O $output_dir/MCG_CLASSIFIER_OUTPUTS/MCG_CONCOCT -C CONCOCT
-# 
+
+INFO "Generating mock external genome data"
+cp $files/mock_data_for_pangenomics/{01,02,03}.fa $output_dir/
+cp $files/mock_data_for_pangenomics/external-genomes.txt $output_dir/
+cp $files/mock_data_for_pangenomics/functions/*-functions.txt $output_dir/
+cp $files/example_description.md $output_dir/
+
+for g in 01 02 03
+do
+    echo -n "$g .. "
+    anvi-gen-contigs-database -f $output_dir/$g.fa \
+                              -o $output_dir/$g.db \
+                              --project-name $g >/dev/null 2>&1
+
+    anvi-import-functions -c $output_dir/$g.db \
+                          -i $output_dir/$g-functions.txt >/dev/null 2>&1
+done; echo
+
+INFO "Dereplicating genomes using pyANI"
+anvi-dereplicate-genomes -o $output_dir/DEREPLICATION_FROM_SCRATCH \
+                         -e $output_dir/external-genomes.txt \
+                         --similarity 0.99 \
+                         --program pyANI
+SHOW_FILE $output_dir/DEREPLICATION_FROM_SCRATCH/CLUSTER_REPORT.txt
+
+INFO "Computing genome similarity"
+anvi-compute-genome-similarity -e $output_dir/external-genomes.txt \
+                               -o $output_dir/GENOME_SIMILARITY_OUTPUT \
+                               --fragment-length 250 \
+                               --min-num-fragments 1 \
+                               --program pyANI
+SHOW_FILE $output_dir/GENOME_SIMILARITY_OUTPUT/ANIb_percentage_identity.txt
+
+INFO "Dereplicating genomes using an existing genome similarity analysis directory"
+anvi-dereplicate-genomes --ani-dir $output_dir/GENOME_SIMILARITY_OUTPUT \
+                         -o $output_dir/DEREPLICATION_FROM_PREVIOUS_RESULTS \
+                         --similarity 0.99 \
+                         --program pyANI
+SHOW_FILE $output_dir/DEREPLICATION_FROM_PREVIOUS_RESULTS/CLUSTER_REPORT.txt
+
+INFO "Generating an anvi'o genomes storage"
+anvi-gen-genomes-storage -e $output_dir/external-genomes.txt -o $output_dir/TEST-GENOMES.db
+
+INFO "Running the pangenome analysis with default parameters"
+anvi-pan-genome -g $output_dir/TEST-GENOMES.db \
+                -o $output_dir/TEST/ \
+                -n TEST \
+                --use-ncbi-blast \
+                --description $output_dir/example_description.md
+
+INFO "Testing anvi-analyze-synteny with default parameters using a pangenome for annotations"
+anvi-analyze-synteny -g $output_dir/TEST-GENOMES.db \
+                     -p $output_dir/TEST/TEST-PAN.db \
+                     --ngram-window-range 2:3 \
+                     -o $output_dir/synteny_output_no_unknowns.tsv
+
+INFO "Testing anvi-analyze-synteny now including unannotated genes"
+anvi-analyze-synteny -g $output_dir/TEST-GENOMES.db \
+                     -p $output_dir/TEST/TEST-PAN.db \
+                     --ngram-window-range 2:3 \
+                     -o $output_dir/synteny_output_with_unknowns.tsv \
+                     --analyze-unknown-functions
+
+INFO "Testing anvi-analyze-synteny now including unannotated genes"
+anvi-analyze-synteny -g $output_dir/TEST-GENOMES.db \
+                     --annotation-source COG_FUNCTION \
+                     --ngram-window-range 2:3 \
+                     -o $output_dir/synteny_output_with_COGs.tsv \
+                     --analyze-unknown-functions
+
 INFO 'A dry run with an items order file for the merged profile without any clustering'
 anvi-interactive -p $output_dir/SAMPLES-MERGED/PROFILE.db \
                  -c $output_dir/CONTIGS.db \
@@ -621,7 +706,7 @@ anvi-interactive -p $output_dir/SAMPLES-MERGED/PROFILE.db \
                  -V $files/additional_view.txt \
                  --split-hmm-layers
 
-INFO "Firing up the interfae to display the split bin, Bin_1"
+INFO "Firing up the interface to display the split bin, Bin_1"
 anvi-interactive -c $output_dir/CONCOCT_BINS_SPLIT/Bin_1/CONTIGS.db \
                  -p $output_dir/CONCOCT_BINS_SPLIT/Bin_1/PROFILE.db \
                  --title "Split bin, Bin_1"

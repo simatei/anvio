@@ -76,8 +76,8 @@ class PanSplitter(summarizer.PanSummarizer):
             raise ConfigError("You must provide a genomes storage database for this operation.")
 
         if not self.pan_db_path:
-            raise ConfigError("You came all the way here without a pan database. Congratulations! But we\
-                               kinda need it at this stage really :/ GOOD DAY.")
+            raise ConfigError("You came all the way here without a pan database. Congratulations! But we "
+                              "kinda need it at this stage really :/ GOOD DAY.")
 
         utils.is_pan_db(self.pan_db_path)
 
@@ -86,10 +86,10 @@ class PanSplitter(summarizer.PanSummarizer):
             sys.exit(0)
 
         if not self.collection_name:
-            raise ConfigError("You must provide a collection name for this to work. If you want to know about\
-                               all the collections in your pan database you can use the program\
-                               `anvi-show-collections-and-bins` or run the same command with the flag\
-                               `--list-collections`.")
+            raise ConfigError("You must provide a collection name for this to work. If you want to know about "
+                              "all the collections in your pan database you can use the program "
+                              "`anvi-show-collections-and-bins` or run the same command with the flag "
+                              "`--list-collections`.")
 
         # if this is not set false, the summarizer class attemts to remove the main output directory
         # upon initialization. not doing that is useful in this context since this allows multiple
@@ -114,10 +114,10 @@ class PanSplitter(summarizer.PanSummarizer):
 
         filesnpaths.gen_output_directory(self.output_directory)
 
-        self.run.warning("Anvi'o is about to start splitting your bins into individual, self-contained anvi'o profiles. This\
-                          is quite a tricky operation, and even if it finishes successfully, you must double check everyting\
-                          in the resulting profiles to make sure things worked as expected. Although we are doing our best to\
-                          test all these, variation between projects make it impossible to be 100% sure.")
+        self.run.warning("Anvi'o is about to start splitting your bins into individual, self-contained anvi'o profiles. This "
+                         "is quite a tricky operation, and even if it finishes successfully, you must double check everyting "
+                         "in the resulting profiles to make sure things worked as expected. Although we are doing our best to "
+                         "test all these, variation between projects make it impossible to be 100% sure.")
 
         for bin_name in self.bin_names_of_interest:
             b = PanBinSplitter(bin_name, self.summary, self.args, run=self.run, progress=self.progress)
@@ -160,8 +160,8 @@ class ProfileSplitter:
 
         profile_db = dbops.ProfileDatabase(self.profile_db_path)
         if profile_db.meta['db_type'] != 'profile':
-            raise ConfigError("Anvi'o was trying to split this profile, but it just realized that it is not a profile\
-                               database. There is something wrong here.")
+            raise ConfigError("Anvi'o was trying to split this profile, but it just realized that it is not a profile "
+                              "database. There is something wrong here.")
         profile_db.disconnect()
 
         # if this is not set false, the summarizer class attemts to remove the main output directory
@@ -186,10 +186,10 @@ class ProfileSplitter:
 
         filesnpaths.gen_output_directory(self.output_directory)
 
-        self.run.warning("Anvi'o is about to start splitting your bins into individual, self-contained anvi'o profiles. This\
-                          is quite a tricky operation, and even if it finishes successfully, you must double check everyting\
-                          in the resulting profiles to make sure things worked as expected. Although we are doing our best to\
-                          test all these, variation between projects make it impossible to be 100% sure.")
+        self.run.warning("Anvi'o is about to start splitting your bins into individual, self-contained anvi'o profiles. This "
+                         "is quite a tricky operation, and even if it finishes successfully, you must double check everyting "
+                         "in the resulting profiles to make sure things worked as expected. Although we are doing our best to "
+                         "test all these, variation between projects make it impossible to be 100% sure.")
 
         if self.skip_variability_tables:
             self.run.warning("Since you asked so nicely, anvi'o will not migrate variability table data into split profiles.")
@@ -199,9 +199,9 @@ class ProfileSplitter:
             b.do_contigs_db()
 
             if self.summary.p_meta['blank']:
-                self.run.warning("It seems your profile database is a blank one. That's fine. Anvi'o assumes that your actual\
-                                  intention is to split your contigs database only. This warning message is here to make sure\
-                                  you will not be upset when you realize your split profile missing a profile database :(")
+                self.run.warning("It seems your profile database is a blank one. That's fine. Anvi'o assumes that your actual "
+                                 "intention is to split your contigs database only. This warning message is here to make sure "
+                                 "you will not be upset when you realize your split profile missing a profile database :(")
             else:
                 b.do_profile_db()
 
@@ -222,19 +222,19 @@ class XSplitter(object):
         skip_hierarchical_clustering = self.skip_hierarchical_clustering
 
         if self.num_splits > self.max_num_splits_for_hierarchical_clustering and not self.enforce_hierarchical_clustering:
-            self.run.warning("It seems you have more than %s splits in this particular bin. This is the\
-                              soft limit for anvi'o to attempt to create a hierarchical clustering of your splits\
-                              (which becomes the center tree in all anvi'o displays). If you want a hierarchical\
-                              clustering to be done anyway, you can re-run the splitting process only for this bin\
-                              by adding these parameters to your run: '--bin-id %s --enforce-hierarchical-clustering'.\
-                              If you feel like you are lost, don't hesitate to get in touch with anvi'o developers." \
+            self.run.warning("It seems you have more than %s splits in this particular bin. This is the "
+                             "soft limit for anvi'o to attempt to create a hierarchical clustering of your splits "
+                             "(which becomes the center tree in all anvi'o displays). If you want a hierarchical "
+                             "clustering to be done anyway, you can re-run the splitting process only for this bin "
+                             "by adding these parameters to your run: '--bin-id %s --enforce-hierarchical-clustering'. "
+                             "If you feel like you are lost, don't hesitate to get in touch with anvi'o developers." \
                                                         % (pp(self.max_num_splits_for_hierarchical_clustering), self.bin_id))
             skip_hierarchical_clustering = True
 
         if self.num_splits > self.max_num_splits_for_hierarchical_clustering and self.enforce_hierarchical_clustering:
-            self.run.warning("Becasue you have used the flag `--enforce-hierarchical-clustering`, anvi'o will attempt\
-                              to create a hierarchical clustering of your %s splits for this bin. It may take a bit of\
-                              time, and it is not even anvi'o's fault, you know  :/" \
+            self.run.warning("Becasue you have used the flag `--enforce-hierarchical-clustering`, anvi'o will attempt "
+                             "to create a hierarchical clustering of your %s splits for this bin. It may take a bit of "
+                             "time, and it is not even anvi'o's fault, you know  :/" \
                                                         % pp(self.max_num_splits_for_hierarchical_clustering))
 
         return skip_hierarchical_clustering
@@ -243,8 +243,8 @@ class XSplitter(object):
     def is_dbs_identical(self, source_db_path, target_db_path):
         """Check whether the two dbs have identical table names"""
 
-        source_db = db.DB(source_db_path, None, ignore_version=True)
-        target_db = db.DB(target_db_path, None, ignore_version=True)
+        source_db = db.DB(source_db_path, None, ignore_version=True, skip_rowid_prepend=True)
+        target_db = db.DB(target_db_path, None, ignore_version=True, skip_rowid_prepend=True)
 
         source_tables = set(source_db.get_table_names())
         target_tables = set(target_db.get_table_names())
@@ -254,9 +254,9 @@ class XSplitter(object):
 
             diff = source_tables.difference(target_tables)
 
-            raise ConfigError("Something went wrong during subsetting :/ Table names in the parent db (%s) and the child\
-                               db (%s) does not seem to be identical. The following tables are found in the source, but\
-                               missing in the target database: '%s'" % (source_db_path, target_db_path, ', '.join(diff)))
+            raise ConfigError("Something went wrong during subsetting :/ Table names in the parent db (%s) and the child "
+                              "db (%s) does not seem to be identical. The following tables are found in the source, but "
+                              "missing in the target database: '%s'" % (source_db_path, target_db_path, ', '.join(diff)))
 
         source_db.disconnect()
         target_db.disconnect()
@@ -278,7 +278,7 @@ class XSplitter(object):
 
 
             self.progress.update("Table '%s' .. reading data" % table_name)
-            source_db = db.DB(source_db_path, None, ignore_version=True)
+            source_db = db.DB(source_db_path, None, ignore_version=True, skip_rowid_prepend=True)
             data = source_db.get_some_rows_from_table(table_name, where_clause)
             source_db.disconnect()
 
@@ -286,7 +286,7 @@ class XSplitter(object):
                 continue
 
             self.progress.update("Table '%s' .. writing data" % table_name)
-            target_db = db.DB(target_db_path, None, ignore_version=True)
+            target_db = db.DB(target_db_path, None, ignore_version=True, skip_rowid_prepend=True)
             target_db._exec_many('''INSERT INTO %s VALUES(%s)''' % (table_name, ','.join(['?'] * len(data[0]))), data)
             target_db.disconnect()
 
@@ -324,8 +324,8 @@ class PanBinSplitter(summarizer.PanBin, XSplitter):
 
 
         if self.enforce_hierarchical_clustering and self.skip_hierarchical_clustering:
-            raise ConfigError("You are confusing anvi'o :/ You can't tell anvi'o to skip hierarchical clustering\
-                               while also asking it to enforce it.")
+            raise ConfigError("You are confusing anvi'o :/ You can't tell anvi'o to skip hierarchical clustering "
+                              "while also asking it to enforce it.")
 
         # set the output directory, and output file paths
         self.bin_output_directory = os.path.join(self.output_directory, bin_name)
@@ -417,10 +417,10 @@ class DBSplitter:
         elif A('genomes_storage'):
             self.mode = 'pan'
         else:
-            raise ConfigError("Well. You are trying to initiate the anvi'o database splitter, but anvi'o has\
-                               no idea what exactly you are trying to do becasue you haven't declared enough\
-                               databases. You should either use a contigs database or a genomes storage among\
-                               your arguments to initiate this class properly.")
+            raise ConfigError("Well. You are trying to initiate the anvi'o database splitter, but anvi'o has "
+                              "no idea what exactly you are trying to do becasue you haven't declared enough "
+                              "databases. You should either use a contigs database or a genomes storage among "
+                              "your arguments to initiate this class properly.")
 
 
     def get(self):
@@ -459,8 +459,8 @@ class BinSplitter(summarizer.Bin, XSplitter):
         self.database_paths = {'CONTIGS.db': os.path.abspath(self.contigs_db_path)}
 
         if self.enforce_hierarchical_clustering and self.skip_hierarchical_clustering:
-            raise ConfigError("You are confusing anvi'o :/ You can't tell anvi'o to skip hierarchical clustering\
-                               while also asking it to enforce it.")
+            raise ConfigError("You are confusing anvi'o :/ You can't tell anvi'o to skip hierarchical clustering "
+                              "while also asking it to enforce it.")
 
         # set the output directory, and output file paths
         self.bin_output_directory = os.path.join(self.output_directory, bin_name)
@@ -521,6 +521,7 @@ class BinSplitter(summarizer.Bin, XSplitter):
                     t.splits_info_table_name: ('split', self.split_names),
                     t.splits_taxonomy_table_name: ('split', self.split_names),
                     t.nt_position_info_table_name: ('contig_name', self.contig_names),
+                    t.scg_taxonomy_table_name: ('gene_callers_id', self.gene_caller_ids),
                     'kmer_contigs': ('contig', self.split_names),
                     'kmer_splits': ('contig', self.split_names),
                 }
@@ -575,6 +576,8 @@ class BinSplitter(summarizer.Bin, XSplitter):
         bin_profile_db.db.copy_paste(table_name='self', source_db_path=self.profile_db_path)
         bin_profile_db.db.copy_paste(table_name='views', source_db_path=self.profile_db_path)
         bin_profile_db.db.copy_paste(table_name='states', source_db_path=self.profile_db_path)
+        bin_profile_db.db.copy_paste(table_name='layer_additional_data', source_db_path=self.profile_db_path)
+        bin_profile_db.db.copy_paste(table_name='layer_orders', source_db_path=self.profile_db_path)
 
         # update some values
         bin_profile_db.db.update_meta_value('contigs_db_hash', self.contigs_db_hash)
@@ -608,16 +611,17 @@ class BinSplitter(summarizer.Bin, XSplitter):
 
                 tables[table_name] = ('contig', self.split_names)
 
-
         # we need to migrate these guys, too. unless we don't need to... if we are migrating,
         # the values in the self table are already accurate. if we are skipping, regardless
         # of what the values were, we will set the absolut correct ones.
         if self.skip_variability_tables:
             bin_profile_db.db.update_meta_value('SNVs_profiled', False)
             bin_profile_db.db.update_meta_value('SCVs_profiled', False)
+            bin_profile_db.db.update_meta_value('INDELs_profiled', False)
         else:
             tables[t.variable_nts_table_name] = ('split_name', self.split_names)
             tables[t.variable_codons_table_name] = ('corresponding_gene_call', self.gene_caller_ids)
+            tables[t.indels_table_name] = ('split_name', self.split_names)
 
         bin_profile_db.disconnect()
 
@@ -695,6 +699,10 @@ class LocusSplitter:
         self.remove_partial_hits = A('remove_partial_hits')
         self.reverse_complement_if_necessary = not A('never_reverse_complement')
         self.include_fasta_output = True
+        self.is_in_flank_mode = bool(A('flank_mode'))
+
+        if self.annotation_sources:
+            self.annotation_sources = self.annotation_sources.split(self.delimiter)
 
         if A('list_hmm_sources'):
             hmmops.SequencesForHMMHits(self.input_contigs_db_path).list_available_hmm_sources()
@@ -712,41 +720,65 @@ class LocusSplitter:
         filesnpaths.is_output_dir_writable(self.output_dir)
 
         if (not (self.gene_caller_ids or self.search_term)) or (self.gene_caller_ids and self.search_term):
-            raise ConfigError("You must specify exacly one of the following: --gene-caller-ids or --search-term")
+            raise ConfigError("You must specify exactly one of the following: --gene-caller-ids or --search-term")
 
         if self.use_hmm and not self.search_term:
             raise ConfigError("If you want to use HMMs to find the gene of interest that will define your locus,\
                                you must also specify a --search-term.")
 
+        if self.is_in_flank_mode and self.use_hmm:
+            raise ConfigError("Anvi'o currently cannot use hmm search terms in flank-mode. If this "
+               "functionality is needed for your analysis, please make a issue on the github "
+               "repository page and we will address it.")
+
+        if self.gene_caller_ids and self.is_in_flank_mode:
+            num_genes = len(utils.get_gene_caller_ids_from_args(self.gene_caller_ids, delimiter=self.delimiter))
+            if num_genes != 2:
+                raise ConfigError("You're in flank mode and opted to use gene caller ids to identify the "
+                                  "flanking genes. But you provided anvi'o %d gene caller id, and anvi'o "
+                                  "needs exactly 2." % num_genes)
+
+        if self.search_term:
+            self.search_term = self.search_term.split(self.delimiter)
+
         utils.is_contigs_db(self.input_contigs_db_path)
 
         if len(self.hmm_sources):
-            self.hmm_sources = set([s.strip() for s in self.hmm_sources.split(',')])
+            self.hmm_sources = set([s.strip() for s in self.hmm_sources.split(self.delimiter)])
 
-        self.num_genes_list = [int(x) for x in self.num_genes.split(',')]
-        if len(self.num_genes_list) > 2:
-            raise ConfigError("The block size you provided, \"%s\", is not valid.\
-                                The gene block size is defined by only one or two integers for either \
-                                a block following the search match or a block preceding and following \
-                                the search match respectively." % self.num_genes)
+        # If user is in default mode, they MUST provide --num-genes
+        if not self.is_in_flank_mode:
+            if not self.num_genes:
+                raise ConfigError("You must provide --num-genes when in default mode.")
 
-        if len(self.num_genes_list) == 1:
-            self.num_genes_list = [0, self.num_genes_list[0]]
+        if self.num_genes:
+            self.num_genes_list = [int(x) for x in self.num_genes.split(self.delimiter)]
+            if len(self.num_genes_list) > 2:
+                raise ConfigError("The block size you provided, \"%s\", is not valid. "
+                                   "The gene block size is defined by only one or two integers for either "
+                                   "a block following the search match or a block preceding and following "
+                                   "the search match respectively (e.g., 3,2)." % self.num_genes)
+
+            if len(self.num_genes_list) == 1:
+                self.num_genes_list = [0, self.num_genes_list[0]]
+
+            if self.delimiter in self.num_genes:
+                self.run.info('Genes to report', '%d genes before the matching gene, and %d that follow' % (self.num_genes_list[0], self.num_genes_list[1]))
+            else:
+                self.run.info('Genes to report', 'Matching gene, and %d genes after it' % (self.num_genes_list[0]))
 
         self.run.warning(None, header="Input / Output", lc="cyan")
         self.run.info('Contigs DB', os.path.abspath(self.input_contigs_db_path))
         self.run.info('Output directory', self.output_dir)
-        if ',' in self.num_genes:
-            self.run.info('Genes to report', '%d genes before the matching gene, and %d that follow' % (self.num_genes_list[0], self.num_genes_list[1]))
-        else:
-            self.run.info('Genes to report', 'Matching gene, and %d genes after it' % (self.num_genes_list[0]))
         self.run.info('Rev-comp the locus sequence if necessary', self.reverse_complement_if_necessary)
 
 
     def init(self):
-        """The whole purpose of this function is to identify which gene calls to focus"""
+        """Init calls sanity check and parses all input to get self.gene_caller_ids_of_interest"""
 
         self.sanity_check()
+
+        self.search_term_to_gene_id_hits_dict = {}
 
         self.run.warning(None, header="Initialization bleep bloops", lc="cyan")
 
@@ -763,7 +795,7 @@ class LocusSplitter:
             self.run.info('Search term', self.search_term, mc='green')
             self.run.info('HMM sources being used', ', '.join(s.sources))
 
-            hmm_hits = utils.get_filtered_dict(s.hmm_hits, 'gene_name', {self.search_term})
+            hmm_hits = utils.get_filtered_dict(s.hmm_hits, 'gene_name', set(self.search_term))
             gene_caller_ids_of_interest = [entry['gene_callers_id'] for entry in hmm_hits.values()]
 
             self.targets.append('HMMs')
@@ -772,17 +804,28 @@ class LocusSplitter:
             self.run.info('Mode', 'Function search')
 
             contigs_db = dbops.ContigsSuperclass(self.args, r=self.run_object)
-            # use functional annotation
             contigs_db.init_functions()
-            self.run.info('Search term', self.search_term, mc='green')
-            self.run.info('Function calls being used', ', '.join(contigs_db.gene_function_call_sources))
 
-            foo, search_report = contigs_db.search_for_gene_functions([self.search_term], requested_sources=self.annotation_sources, verbose=True)
-            # gene id's of genes with the searched function
-            gene_caller_ids_of_interest = [i[0] for i in search_report]
+            # use functional annotation
+            # if self.search_term:
+            gene_caller_ids_of_interest = []
+            counter = 1
+            for term in self.search_term:
+                self.run.info('Search term %d of %d' % (counter,len(self.search_term)), term, mc='green')
+                self.run.info('Function calls being used', ', '.join((contigs_db.gene_function_call_sources
+                                                                      if not self.annotation_sources
+                                                                      else self.annotation_sources)))
 
-            self.targets.append('functions')
-            self.sources = contigs_db.gene_function_call_sources
+                foo, search_report = contigs_db.search_for_gene_functions([term], requested_sources=self.annotation_sources, verbose=True)
+                # gene id's of genes with the searched function
+                genes_that_hit = [i[0] for i in search_report]
+                gene_caller_ids_of_interest.extend(genes_that_hit)
+
+                self.search_term_to_gene_id_hits_dict[term] = set(genes_that_hit)
+
+                self.targets.append('functions')
+                self.sources = contigs_db.gene_function_call_sources
+                counter += 1
 
         # Multiple sources could annotate the same gene, so make sure the list is unique
         self.gene_caller_ids_of_interest = set(gene_caller_ids_of_interest)
@@ -798,52 +841,151 @@ class LocusSplitter:
             self.init()
 
         if not len(self.gene_caller_ids_of_interest):
-            self.run.warning("There aren't any gene calls that match to the criteria you provided to anvi'o\
-                              export locus magic. Is this yet another case of you did everything right\
-                              yet anvi'o failed you? If that's the case, let us know :( This class will quietly\
-                              kill this process without reporting any error since a lack of hit may be the\
-                              expected outcome of some weird processes somewhere.")
+            self.run.warning("There aren't any gene calls that match to the criteria you provided to anvi'o "
+                             "export locus magic. Is this yet another case of you did everything right "
+                             "yet anvi'o failed you? If that's the case, let us know :( This class will quietly "
+                             "kill this process without reporting any error since a lack of hit may be the "
+                             "expected outcome of some weird processes somewhere.")
+            return
 
         self.contigs_db = dbops.ContigsSuperclass(self.args, r=self.run_object)
         self.contigs_db.init_functions()
-        counter = 1
-        for gene_callers_id in self.gene_caller_ids_of_interest:
+
+        # Here we will differentiate between being in default-mode OR flank-mode. If in default-mode, we will iterate through
+        # the gene-caller-ids-of-interest and cut out the locus X amount of genes above and below the gene-caller-id
+        # based on the --num-genes given by the user. If in flank-mode, we will only export 1 locus based on the flanking
+        # gene-caller-ids provided.
+
+        # default
+        if not self.is_in_flank_mode:
+            counter = 1
+            for gene_callers_id in self.gene_caller_ids_of_interest:
+                self.run.warning(None,
+                                 header="Exporting locus %d of %d" % (counter, len(self.gene_caller_ids_of_interest)),
+                                 nl_after=0)
+
+                output_path_prefix = os.path.join(self.output_dir, "%s_%.4d" % (self.output_file_prefix, counter))
+
+                self.export_locus(output_path_prefix, gene_callers_id)
+
+                counter += 1
+
+            ##################
+            # This is where anvi'o should print a warning message that the exported loci
+            # are overlapping. Please see this issue for a reproducible example:
+            # https://github.com/merenlab/anvio/issues/1228
+
+            # Print warning if exported loci overlap on contig
+            # from itertools import combinations
+
+            # counter = 0
+            # for combo in combinations(list(self.gene_caller_ids_of_interest), 2):  # 2 for pairs
+            #     gene_1_1 = combo[0] - self.num_genes_list[0]
+            #     gene_2_1 = combo[0] + self.num_genes_list[1]
+            #     first_gene_of_the_block_1 = min(gene_1_1, gene_2_1)
+            #     last_gene_of_the_block_1 = max(gene_1_1, gene_2_1)
+
+            #     gene_1_2 = combo[1] - self.num_genes_list[0]
+            #     gene_2_2 = combo[1] + self.num_genes_list[1]
+            #     first_gene_of_the_block_2 = min(gene_1_2, gene_2_2)
+            #     last_gene_of_the_block_2 = max(gene_1_2, gene_2_2)
+
+            #     if first_gene_of_the_block_2 < first_gene_of_the_block_1 < last_gene_of_the_block_2:
+            #         self.run.warning(None,
+            #                         header="OVERLAPPPING!",
+            #                         nl_after=0)
+
+            #     elif first_gene_of_the_block_2 < last_gene_of_the_block_1 < last_gene_of_the_block_2:
+            #         self.run.warning(None,
+            #                         header="OVERLAPPPING!",
+            #                         nl_after=0)
+            #     counter += 1
+
+            ##################
+
+        # flank-mode
+        elif self.is_in_flank_mode:
             self.run.warning(None,
-                             header="Exporting locus %d of %d" % \
-                                        (counter, len(self.gene_caller_ids_of_interest)),
+                             header="Exporting locus 1 of 1",
                              nl_after=0)
 
-            output_path_prefix = os.path.join(self.output_dir, "%s_%.4d" % (self.output_file_prefix, counter))
-
-            self.export_locus(gene_callers_id, output_path_prefix)
-
-            counter += 1
+            output_path_prefix = os.path.join(self.output_dir, self.output_file_prefix)
+            gene_caller_ids_flank_pair = list(self.gene_caller_ids_of_interest)
+            self.export_locus(output_path_prefix, None, gene_caller_ids_flank_pair)
 
 
-    def export_locus(self, gene_callers_id, output_path_prefix):
-        """Takes a gene callers ID, and exports a contigs database.
+    def export_locus(self, output_path_prefix, gene_callers_id=None, gene_caller_ids_flank_pair=None):
+        """
+        This function takes gene_callers_id or gene_caller_ids_flank_pair, and exports a contigs database.
 
-           Output path prefix should be unique for every export locus call. If the prefix you provide
-           looks like this:
+        If gene_callers_id is provided, export_locus use --num-genes to  cut X above and below the
+        gene_callers_id. If gene_caller_ids_flank_pair is provided, export_locus will cut out the locus
+        between the pair provided. It is REQUIRED that gene_caller_ids_flank_pair is a pair of gen-callers-ID.
 
-                >>> output_path_prefix = '/path/to/dir/file_name_prefix'
+        Output path prefix should be unique for every export locus call. If the prefix you provide
+        looks like this:
 
-           the output files will be stored as this:
+            >>> output_path_prefix = '/path/to/dir/file_name_prefix'
 
-                >>> '/path/to/dir/file_name_prefix.fa'
-                >>> '/path/to/dir/file_name_prefix.db'
+        the output files will be stored as this:
 
-           """
+            >>> '/path/to/dir/file_name_prefix.fa'
+            >>> '/path/to/dir/file_name_prefix.db'
+
+
+        Need to add check, where if you are in flank mode and one of your search_terms gives you more then one gene-caller-id
+        then you have more then how to choose which contig to cut out?????????
+        """
+        if gene_callers_id and not isinstance(gene_callers_id, int):
+            raise ConfigError("The gene_caller_id must be an integer.")
+        if gene_callers_id and gene_caller_ids_flank_pair:
+            raise ConfigError("You can only provide the gene_callers_id or gene_caller_id_pair (with a , delimiter).")
+        elif not (gene_callers_id or gene_caller_ids_flank_pair):
+            raise ConfigError("You must provide at least 1 of the following: gene_callers_id or gene_caller_id_pair (with a , delimiter).")
+
+        if self.is_in_flank_mode:
+            if not isinstance(gene_caller_ids_flank_pair, list):
+                raise ConfigError("The gene_caller_ids_flank_pair must be integers.")
+            if [g for g in gene_caller_ids_flank_pair if not isinstance(g, int) or g < 0]:
+                raise ConfigError("Both gene-caller_ids inputs must be integers!")
+
+            if len(gene_caller_ids_flank_pair) == 1:
+                raise ConfigError("You are in flank-mode, and anvi'o only found %d gene-caller-id. "
+                                  "Anvi'o cannot handle this because flank-mode needs a pair of gene-caller-id's "
+                                  "to cut out a locus (i.e., only a pair of flanking genes)! This most likely occured because 1 of your "
+                                  "search-terms was not found the functions of the CONTIGS.db. Please try again with another "
+                                  "search-term :)" % (len(self.gene_caller_ids_of_interest)))
+            elif len(gene_caller_ids_flank_pair) > 2:
+                raise ConfigError("You are in flank-mode, and anvi'o found %d total gene-caller-id's from the search-terms provided. "
+                                  "Anvi'o cannot handle this because flank-mode needs a pair of gene-caller-id's "
+                                  "to cut out a locus (i.e., only a pair of flanking genes)! Here are the gene-caller-ids anvi'o found "
+                                  "from the search-terms %s: %s and %s: %s. Please use `anvi-export-functions` on your CONTIGS.db, locate "
+                                  "these gene-caller-id's, then confirm the correct flanking gene-caller-ids. Anvi'o recommends you "
+                                  "use the --gene-caller-ids flag to specify the specific pair gene-caller-ids you need to cut out the locus "
+                                  "so there are no more mix ups. On the other hand, if you are trying to extract multiple loci from a genome "
+                                  "using the same flanking genes, anvi'o cannot currently handle this in --flank-mode. If this functionality "
+                                  "is necessary for your analysis, please make an issue on github and we will address it." % (len(self.gene_caller_ids_of_interest),
+                                                                       str(self.search_term[0]),
+                                                                       str(self.search_term_to_gene_id_hits_dict[self.search_term[0]]),
+                                                                       str(self.search_term[1]),
+                                                                       str(self.search_term_to_gene_id_hits_dict[self.search_term[1]]),
+                                                                       ))
+
+            gene_caller_ids = list(gene_caller_ids_flank_pair)
+            first_gene_of_the_block, last_gene_of_the_block = sorted(gene_caller_ids)
+            gene_callers_id = first_gene_of_the_block # just for getting contig name from contigDB
 
         if os.path.isdir(output_path_prefix):
             raise ConfigError("Output path prefix can't be a directory name...")
 
         filesnpaths.is_output_file_writable(output_path_prefix + '.fa')
 
+        # if not already initiated, re-initiate contigsDB
         if not self.contigs_db:
             self.contigs_db = dbops.ContigsSuperclass(self.args, r=self.run_object)
             self.contigs_db.init_functions()
 
+        # Query for gene_call, contig_name, and genes_in_contig_sorted
         gene_call = self.contigs_db.genes_in_contigs_dict[gene_callers_id]
         contig_name = self.contigs_db.genes_in_contigs_dict[gene_callers_id]['contig']
         genes_in_contig_sorted = sorted(list(self.contigs_db.contig_name_to_genes[contig_name]))
@@ -851,16 +993,20 @@ class LocusSplitter:
         D = lambda: 1 if gene_call['direction'] == 'f' else -1
         premature = False
 
+        # Print out locus info for user
         self.run.info("Contig name", contig_name)
         self.run.info("Contig length", self.contigs_db.contigs_basic_info[contig_name]['length'])
         self.run.info("Num genes in contig", len(genes_in_contig_sorted))
         self.run.info("Target gene call", gene_callers_id)
         self.run.info("Target gene direction", "Forward" if D() == 1 else "Reverse", mc = 'green' if D() == 1 else 'red')
 
-        gene_1 = gene_callers_id - self.num_genes_list[0] * D()
-        gene_2 = gene_callers_id + self.num_genes_list[1] * D()
-        first_gene_of_the_block = min(gene_1, gene_2)
-        last_gene_of_the_block = max(gene_1, gene_2)
+        # Here we run Default-mode and cut out the locus based on the anchor gene_callers_id and
+        # cut + self.num_genes_list[0] and - self.num_genes_list[1] arount it
+        if not self.is_in_flank_mode:
+            gene_1 = gene_callers_id - self.num_genes_list[0] * D()
+            gene_2 = gene_callers_id + self.num_genes_list[1] * D()
+            first_gene_of_the_block = min(gene_1, gene_2)
+            last_gene_of_the_block = max(gene_1, gene_2)
 
         self.run.info("First and last gene of the locus (raw)", "%d and %d" % (first_gene_of_the_block, last_gene_of_the_block))
 
@@ -888,9 +1034,11 @@ class LocusSplitter:
         locus_stop = self.contigs_db.genes_in_contigs_dict[last_gene_of_the_block]['stop']
 
         # being a performance nerd here yes
-        contig_sequence = db.DB(self.input_contigs_db_path, None, ignore_version=True) \
+        contig_sequence = db.DB(self.input_contigs_db_path, None, ignore_version=True, skip_rowid_prepend=True) \
                             .get_some_rows_from_table(t.contig_sequences_table_name,
                                                       where_clause="contig='%s'" % contig_name)[0][1]
+
+        # Extract the locus!
         locus_sequence = contig_sequence[locus_start:locus_stop]
 
         # here we will create a gene calls dict for genes that are specific to our locus. since we trimmed
@@ -960,9 +1108,9 @@ class LocusSplitter:
             if self.overwrite_output_destinations:
                 filesnpaths.shutil.rmtree(profile_output_dir)
             else:
-                raise ConfigError("The directory %s exists, which kinda messes things up here. Either remove\
-                                   it manually, or use the flag  --overwrite-output-destinations so anvi'o can\
-                                   do it for you." % profile_output_dir)
+                raise ConfigError("The directory %s exists, which kinda messes things up here. Either remove "
+                                  "it manually, or use the flag  --overwrite-output-destinations so anvi'o can "
+                                  "do it for you." % profile_output_dir)
 
         # sort out the contigs database output path
         if filesnpaths.is_file_exists(locus_output_db_path, dont_raise=True):
@@ -995,7 +1143,7 @@ class LocusSplitter:
 
         # similarly, here we will store external gene calls so there will be no gene calling during
         # the generation of the contigs database
-        headers = ['gene_callers_id', 'contig', 'start', 'stop', 'direction', 'partial', 'source', 'version']
+        headers = ['gene_callers_id', 'contig', 'start', 'stop', 'direction', 'partial', 'call_type', 'source', 'version']
         utils.store_dict_as_TAB_delimited_file(gene_calls, locus_external_gene_calls, headers=headers)
 
         # this is where magic happens. we ask anvi'o to create a contigs database for us.
@@ -1057,7 +1205,7 @@ class LocusSplitter:
 
         entries = [(gene_caller_id_conversion_dict[g], amino_acid_sequences[g]['sequence']) for g in amino_acid_sequences]
 
-        locus_db = db.DB(locus_output_db_path, None, ignore_version=True)
+        locus_db = db.DB(locus_output_db_path, None, ignore_version=True, skip_rowid_prepend=True)
         locus_db._exec("DELETE FROM %s" % t.gene_amino_acid_sequences_table_name)
         locus_db.insert_many(t.gene_amino_acid_sequences_table_name, entries=entries)
         locus_db.disconnect()

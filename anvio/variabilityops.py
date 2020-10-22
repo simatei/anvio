@@ -28,6 +28,7 @@ import anvio.structureops as structureops
 import anvio.auxiliarydataops as auxiliarydataops
 
 from anvio.errors import ConfigError
+from anvio.tables.miscdata import TableForAminoAcidAdditionalData
 
 
 __author__ = "Developers of anvi'o (see AUTHORS.txt)"
@@ -41,6 +42,7 @@ __email__ = "a.murat.eren@gmail.com"
 
 pd.options.display.max_columns=100
 pd.options.display.max_rows=100
+
 pp = terminal.pretty_print
 progress = terminal.Progress()
 run = terminal.Run(width=62)
@@ -139,9 +141,9 @@ class VariabilityFilter:
         matrix. The default value for -m is 0, which means every x found in the database and
         survived previous filtering criteria will be reported. Naturally, -m can not be more than
         half of the number of samples.)"""
-        raise ConfigError("Woops. The function that handles --min-scatter doesn't do \
-                           what we thought it did. This will be fixed maybe. Sorry for \
-                           the inconvenience.")
+        raise ConfigError("Woops. The function that handles --min-scatter doesn't do "
+                          "what we thought it did. This will be fixed maybe. Sorry for "
+                          "the inconvenience.")
 
 
     def are_passed_arguments_valid(self, kwargs):
@@ -250,9 +252,9 @@ class VariabilityFilter:
 
         self.append_info_log("found attribute names", ", ".join(arg_val_names_found))
         if not filter_params:
-            raise ConfigError("VariabilityFilter :: Explicit parameters were not passed to\
-                               filter_data, so anvi'o tried its best to find attributes that made\
-                               sense given your filter criterion `%s`, but failed.")
+            raise ConfigError("VariabilityFilter :: Explicit parameters were not passed to "
+                              "filter_data, so anvi'o tried its best to find attributes that made "
+                              "sense given your filter criterion `%s`, but failed.")
         return filter_params
 
 
@@ -352,8 +354,8 @@ class VariabilityFilter:
                                        "criterion"     : self.criterion}
 
         else:
-            raise ConfigError("VariabilitySuper :: `%s` is not a keyword recognized by the built in\
-                               function methods of this class." % (keyword_name))
+            raise ConfigError("VariabilitySuper :: `%s` is not a keyword recognized by the built in "
+                              "function methods of this class." % (keyword_name))
 
         return d
 
@@ -372,8 +374,8 @@ class VariabilityFilter:
         for param in params_inspection:
             has_default = True if params_inspection[param].default is not inspect._empty else False
             if not has_default and param not in kwargs.keys():
-                raise ConfigError("`%s` was passed to filter_data. All its arguments without defaults must\
-                                   also be passed, but `%s` was not. Do so with \"%s = ...\"" \
+                raise ConfigError("`%s` was passed to filter_data. All its arguments without defaults must "
+                                  "also be passed, but `%s` was not. Do so with \"%s = ...\"" \
                                        % (self.passed_function, param, param))
             else:
                 self.append_info_log("`%s` of `%s` was passed or has default" % (param, self.passed_function), True)
@@ -392,10 +394,10 @@ class VariabilityFilter:
             if kwarg in self.known_kwargs:
                 if kwarg.endswith("_condition") and kwarg.replace("_condition","_filter") not in kwargs:
                     self.append_info_log("condition argument: `%s`" % (kwarg), "missing filter partner: `%s`" % (kwarg.replace("_condition","_filter")))
-                    raise ConfigError("VariabilityFilter :: The argument `%s` takes something that\
-                                       evaluates to True or False that determines whether or not the\
-                                       data will be filtered by the argument `%s`, which must\
-                                       also be passed." % (kwarg, kwarg.replace("_condition","_filter")))
+                    raise ConfigError("VariabilityFilter :: The argument `%s` takes something that "
+                                      "evaluates to True or False that determines whether or not the "
+                                      "data will be filtered by the argument `%s`, which must "
+                                      "also be passed." % (kwarg, kwarg.replace("_condition","_filter")))
                 else:
                     self.append_info_log("filter argument: `%s`" % (kwarg), "known kwarg")
 
@@ -430,10 +432,10 @@ class VariabilityFilter:
     def is_df_exists(self):
         try:
             self.df = getattr(self, self.name)
-        except AttributeError as e:
+        except AttributeError:
             self.append_info_log("%s is an object" % self.name, False)
-            raise ConfigError("VariabilityFilter :: You tried to filter the object `%s` which is\
-                               not an attribute of VariabilitySuper or its parent classes." \
+            raise ConfigError("VariabilityFilter :: You tried to filter the object `%s` which is "
+                              "not an attribute of VariabilitySuper or its parent classes." \
                                    % (self.name))
         self.append_info_log("%s is an object" % self.name, True)
 
@@ -441,8 +443,8 @@ class VariabilityFilter:
     def is_df_a_dataframe(self):
         if type(self.df) != pd.core.frame.DataFrame:
             self.append_info_log("name points to a valid dataframe", False)
-            raise ConfigError("VariabilityFilter :: You tried to filter the object `%s` which is\
-                               of type `%s`. You can only filter pandas dataframes." \
+            raise ConfigError("VariabilityFilter :: You tried to filter the object `%s` which is "
+                              "of type `%s`. You can only filter pandas dataframes." \
                                    % (self.name, type(self.df)))
         self.append_info_log("name points to a valid dataframe", True)
 
@@ -453,8 +455,8 @@ class VariabilityFilter:
             return
 
         if not self.is_filter_criterion_a_column_in_dataframe():
-            raise ConfigError("VariabilityFilter :: The filter criterion `%s` does not exist as\
-                               a column in self.df. It must." % (self.criterion))
+            raise ConfigError("VariabilityFilter :: The filter criterion `%s` does not exist as "
+                              "a column in self.df. It must." % (self.criterion))
 
 
     def is_filter_criterion_a_column_in_dataframe(self):
@@ -538,9 +540,11 @@ class VariabilitySuper(VariabilityFilter, object):
         self.skip_sanity_check = A('skip_sanity_check', bool) or False
         self.include_split_names_in_output = A('include_split_names', null)
         self.include_contig_names_in_output = A('include_contig_names', null)
+        self.include_additional_data_in_output = A('include_additional_data', null)
         self.skip_comprehensive_variability_scores = A('skip_comprehensive_variability_scores', bool) or False
 
         self.append_structure_residue_info = True if self.structure_db_path else False
+        self.genes_with_structure = set([])
         self.table_provided = False if self.data.empty else True
         self.load_all_genes = True
         self.load_all_samples = True
@@ -562,29 +566,33 @@ class VariabilitySuper(VariabilityFilter, object):
         # f = function called in self.process
         # **kwargs = parameters passed to function
         F = lambda f, **kwargs: (f, kwargs)
-        self.process_functions = [F(self.init_commons),
-                                  F(self.load_variability_data),
-                                  F(self.load_structure_data),
-                                  F(self.apply_preliminary_filters),
-                                  F(self.set_unique_pos_identification_numbers),
-                                  F(self.filter_data, function=self.filter_by_num_positions_from_each_split),
-                                  F(self.compute_additional_fields),
-                                  F(self.filter_data, criterion="departure_from_consensus",
-                                                      min_filter=self.min_departure_from_consensus,
-                                                      min_condition=self.min_departure_from_consensus > 0,
-                                                      max_filter=self.max_departure_from_consensus,
-                                                      max_condition=self.max_departure_from_consensus < 1),
-                                  F(self.recover_base_frequencies_for_all_samples),
-                                  F(self.filter_data, function=self.filter_by_minimum_coverage_in_each_sample),
-                                  F(self.compute_comprehensive_variability_scores),
-                                  F(self.compute_gene_coverage_fields),
-                                  F(self.get_residue_structure_information,)]
+        self.process_functions = [
+            F(self.init_commons),
+            F(self.load_variability_data),
+            F(self.load_structure_data),
+            F(self.load_additional_data),
+            F(self.apply_preliminary_filters),
+            F(self.set_unique_pos_identification_numbers),
+            F(self.filter_data, function=self.filter_by_num_positions_from_each_split),
+            F(self.compute_additional_fields),
+            F(self.filter_data, criterion="departure_from_consensus",
+                                min_filter=self.min_departure_from_consensus,
+                                min_condition=self.min_departure_from_consensus > 0,
+                                max_filter=self.max_departure_from_consensus,
+                                max_condition=self.max_departure_from_consensus < 1),
+            F(self.recover_base_frequencies_for_all_samples),
+            F(self.filter_data, function=self.filter_by_minimum_coverage_in_each_sample),
+            F(self.compute_comprehensive_variability_scores),
+            F(self.compute_gene_coverage_fields),
+            F(self.merge_residue_structure_info,),
+            F(self.merge_additional_data,),
+        ]
 
         if not self.skip_sanity_check:
             self.sanity_check()
 
         # Initialize the contigs super
-        if self.contigs_db_path:
+        if self.contigs_db_path and not self.table_provided:
             dbops.ContigsSuperclass.__init__(self, self.args, r=self.run, p=self.progress)
 
             if self.splits_of_interest_path:
@@ -613,8 +621,8 @@ class VariabilitySuper(VariabilityFilter, object):
             ],
             'gene_info': [
                 ('corresponding_gene_call', int),
-                ('in_partial_gene_call', int),
-                ('in_complete_gene_call', int),
+                ('in_noncoding_gene_call', int),
+                ('in_coding_gene_call', int),
                 ('base_pos_in_codon', int),
                 ('codon_order_in_gene', int),
                 ('codon_number', int),
@@ -649,16 +657,18 @@ class VariabilitySuper(VariabilityFilter, object):
             ],
             'structural': [
             ],
+            'additional_data': [
+            ],
         }
         self.columns_to_report_order = ['position_identifiers', 'sample_info', 'gene_info', 'coverage_info',
-                                        'sequence_identifiers', 'statistical', 'SSMs', 'structural']
+                                        'sequence_identifiers', 'statistical', 'SSMs', 'structural', 'additional_data']
 
 
 
     def sanity_check(self):
         if self.engine not in variability_engines:
-            raise ConfigError("The VariabilitySuper class is inherited with an unknown engine.\
-                               WTF is '%s'? Anvi'o needs an adult :(" % self.engine)
+            raise ConfigError("The VariabilitySuper class is inherited with an unknown engine. "
+                              "WTF is '%s'? Anvi'o needs an adult :(" % self.engine)
 
         if not self.table_provided:
             if not self.contigs_db_path:
@@ -668,67 +678,67 @@ class VariabilitySuper(VariabilityFilter, object):
                 raise ConfigError("You need to provide a profile database.")
 
         if self.table_provided and (self.contigs_db_path or self.profile_db_path):
-            raise ConfigError("You provided a variability table (--variability-profile), but you\
-                               also provided a contigs database and/or a profile database. You need\
-                               to supply either a variability table, or, both a profile database and\
-                               a contigs database combo.")
+            raise ConfigError("You provided a variability table (--variability-profile), but you "
+                              "also provided a contigs database and/or a profile database. You need "
+                              "to supply either a variability table, or, both a profile database and "
+                              "a contigs database combo.")
 
         if self.table_provided and (self.collection_name or self.bin_id):
-            raise ConfigError("You provided a variability table (--variability-profile), but you\
-                               also provided a collection name and/or a bin id, which are parameters\
-                               only used in conjunction with a profile database and a contigs\
-                               database. No big deal, just remove these parameters from your\
-                               command.")
+            raise ConfigError("You provided a variability table (--variability-profile), but you "
+                              "also provided a collection name and/or a bin id, which are parameters "
+                              "only used in conjunction with a profile database and a contigs "
+                              "database. No big deal, just remove these parameters from your "
+                              "command.")
 
         if self.table_provided and (self.splits_of_interest_path or self.splits_of_interest):
             if "split_name" not in self.data.columns:
-                raise ConfigError("Your variability profile does not have a split_name column, and\
-                                   therefore you cannot provide splits of interest\
-                                   (--splits-of-interest).")
+                raise ConfigError("Your variability profile does not have a split_name column, and "
+                                  "therefore you cannot provide splits of interest "
+                                  "(--splits-of-interest).")
 
         if self.genes_of_interest and (self.genes_of_interest_path or self.gene_caller_ids):
-            raise ConfigError("VariabilitySuper: you initialized me with self.genes_of_interest\
-                               because you're a programmer and you know what you're doing. But you\
-                               also initialized me with self.genes_of_interest_path and/or\
-                               self.gene_caller_ids. Because you didn't skip sanity_check(), I am\
-                               complaining. If you skip sanity_check, self.genes_of_interest_path\
-                               and self.gene_caller_ids will be ignored.")
+            raise ConfigError("VariabilitySuper: you initialized me with self.genes_of_interest "
+                              "because you're a programmer and you know what you're doing. But you "
+                              "also initialized me with self.genes_of_interest_path and/or "
+                              "self.gene_caller_ids. Because you didn't skip sanity_check(), I am "
+                              "complaining. If you skip sanity_check, self.genes_of_interest_path "
+                              "and self.gene_caller_ids will be ignored.")
 
         if self.sample_ids_of_interest and self.sample_ids_of_interest_path:
-            raise ConfigError("VariabilitySuper: you initialized me with self.sampes_of_interest\
-                               because you're a programmer and you know what you're doing.  But you\
-                               also initialized me with self.sampes_of_interest_path. Because you\
-                               didn't skip sanity_check(), I am complaining. If you skip\
-                               sanity_check, self.sampes_of_interest_path.")
+            raise ConfigError("VariabilitySuper: you initialized me with self.sampes_of_interest "
+                              "because you're a programmer and you know what you're doing.  But you "
+                              "also initialized me with self.sampes_of_interest_path. Because you "
+                              "didn't skip sanity_check(), I am complaining. If you skip "
+                              "sanity_check, self.sampes_of_interest_path.")
 
         if self.splits_of_interest and (self.splits_of_interest_path or self.bin_id or self.collection_name):
-            raise ConfigError("VariabilitySuper: you initialized me with self.splits_of_interest\
-                               because you're a programmer and you know what you're doing. But you\
-                               also initialized me with one/all/some of\
-                               self.splits_of_interest_path, self.bin_id, self.collection_name.\
-                               Because you didn't skip sanity_check(), I am complaining. If you skip\
-                               sanity_check, self.splits_of_interest_path, self.bin_id,\
-                               self.collection_name will all be ignored.")
+            raise ConfigError("VariabilitySuper: you initialized me with self.splits_of_interest "
+                              "because you're a programmer and you know what you're doing. But you "
+                              "also initialized me with one/all/some of "
+                              "self.splits_of_interest_path, self.bin_id, self.collection_name. "
+                              "Because you didn't skip sanity_check(), I am complaining. If you skip "
+                              "sanity_check, self.splits_of_interest_path, self.bin_id, "
+                              "self.collection_name will all be ignored.")
 
         if self.splits_of_interest_path and self.gene_caller_ids:
-            raise ConfigError("You can't declare a file for split names of interest and then list a\
-                               bunch of gene caller ids to focus :(")
+            raise ConfigError("You can't declare a file for split names of interest and then list a "
+                              "bunch of gene caller ids to focus :(")
 
         if self.splits_of_interest_path and self.genes_of_interest_path:
-            raise ConfigError("You can't declare files with split names of interest and gene caller\
-                               ids of interest :/ Pick one.")
+            raise ConfigError("You can't declare files with split names of interest and gene caller "
+                              "ids of interest :/ Pick one.")
 
         if self.genes_of_interest_path and self.gene_caller_ids:
-            raise ConfigError("Nice try. But it is not OK to list a bunch of gene caller ids to focus\
-                               and also provide a file path with gene caller ids :(")
+            raise ConfigError("Nice try. But it is not OK to list a bunch of gene caller ids to focus "
+                              "and also provide a file path with gene caller ids :(")
 
         if self.gene_caller_ids:
             if isinstance(self.gene_caller_ids, str):
                 try:
                     self.gene_caller_ids = [int(g.strip()) for g in self.gene_caller_ids.split(',')]
                 except:
-                    raise ConfigError("The gene caller ids anvi'o found does not seem like gene caller\
-                                       ids anvi'o use. There is something wrong here :(")
+                    raise ConfigError("The gene caller ids anvi'o found does not seem like gene caller "
+                                      "ids anvi'o use. There is something wrong here :(")
 
         if self.genes_of_interest_path:
             filesnpaths.is_file_tab_delimited(self.genes_of_interest_path, expected_number_of_fields=1)
@@ -736,16 +746,40 @@ class VariabilitySuper(VariabilityFilter, object):
             try:
                 self.gene_caller_ids = [int(g.strip()) for g in open(self.genes_of_interest_path, 'rU').readlines()]
             except:
-                raise ConfigError("The gene caller ids anvi'o found in that file does not seem like gene caller\
-                                   ids anvi'o would use. There is something wrong here :(")
+                raise ConfigError("The gene caller ids anvi'o found in that file does not seem like gene caller "
+                                  "ids anvi'o would use. There is something wrong here :(")
 
 
-    def convert_counts_to_frequencies(self, retain_counts = False):
+    def convert_counts_to_frequencies(self, retain_counts=False, remove_zero_cov_entries=False):
+        """Convert counts (e.g. the A, C, T, G, N columns for NTs) to frequencies
+
+        Parameters
+        ==========
+        retain_counts : bool, False
+            If True, A, C, T, G, N are preserved and 5 new corresponding columns are made suffixed
+            by '_freq', e.g. 'A_freq'.
+
+        remove_zero_cov_entries : bool, False
+            Frequencies are undefined if coverage is 0, so entries became nan for coverage == 0. If
+            this flag is True, zero coverage entries are removed
+        """
+
+        if remove_zero_cov_entries:
+            self.data = self.data[self.data['coverage'] > 0]
+
         if retain_counts:
             freq_columns = [x + '_freq' for x in self.items]
             self.data[freq_columns] = self.data[self.items].divide(self.data['coverage'], axis = 0)
         else:
             self.data[self.items] = self.data[self.items].divide(self.data['coverage'], axis = 0)
+
+
+    def convert_frequencies_to_counts(self):
+        """Convert frequencies back to counts.
+
+        Assumes items were normalized with self.convert_counts_to_frequencies(retain_counts=False)
+        """
+        self.data[self.items] = self.data[self.items].multiply(self.data['coverage'], axis=0).astype(int)
 
 
     def get_sample_ids_of_interest(self, sample_ids_of_interest_path=""):
@@ -755,7 +789,7 @@ class VariabilitySuper(VariabilityFilter, object):
            method.
         """
         # use class-wide attribute if no parameters is passed
-        if sample_ids_of_interest_path is "":
+        if sample_ids_of_interest_path == "":
             sample_ids_of_interest_path = self.sample_ids_of_interest_path
 
         if sample_ids_of_interest_path:
@@ -775,7 +809,7 @@ class VariabilitySuper(VariabilityFilter, object):
            inheriting this method.
         """
         # use class-wide attributes if no parameters are passed
-        if genes_of_interest_path is "" and gene_caller_ids is "":
+        if genes_of_interest_path == "" and gene_caller_ids == "":
             genes_of_interest_path = self.genes_of_interest_path
             gene_caller_ids = self.gene_caller_ids
 
@@ -789,9 +823,9 @@ class VariabilitySuper(VariabilityFilter, object):
                 genes_of_interest = set([int(s.strip()) for s in open(genes_of_interest_path).readlines()])
             except ValueError:
                 self.progress.end()
-                raise ConfigError("Well. Anvi'o was working on your genes of interest ... and ... \
-                                   those gene IDs did not look like anvi'o gene caller ids :/ Anvi'o\
-                                   is now sad.")
+                raise ConfigError("Well. Anvi'o was working on your genes of interest ... and ... "
+                                  "those gene IDs did not look like anvi'o gene caller ids :/ Anvi'o "
+                                  "is now sad.")
 
         else:
             # looks like no genes were specified
@@ -808,7 +842,7 @@ class VariabilitySuper(VariabilityFilter, object):
         """
 
         # use class-wide attributes if no parameters are passed
-        if split_source is "" and splits_of_interest_path is "":
+        if split_source == "" and splits_of_interest_path == "":
             split_source = self.split_source
             splits_of_interest_path = self.splits_of_interest_path
 
@@ -822,16 +856,16 @@ class VariabilitySuper(VariabilityFilter, object):
             # Edit: it exploded slightly :( I am ashamed of this code
             try:
                 splits_of_interest = list(set([self.gene_callers_id_to_split_name_dict[g] for g in (self.genes_of_interest or self.gene_caller_ids)]))
-            except KeyError as e:
+            except KeyError:
                 raise ConfigError("Some of the gene caller IDs you provided are not in your contigs database...")
 
         elif split_source == "bin_id":
             if self.collection_name and not self.bin_id:
-                raise ConfigError('When you declare a collection name, you must also declare a bin id\
-                                   (from which the split names of interest will be acquired).')
+                raise ConfigError('When you declare a collection name, you must also declare a bin id '
+                                  '(from which the split names of interest will be acquired).')
             if self.bin_id and not self.collection_name:
-                raise ConfigError("You declared a bin id but anvi'o doesn't know which collection\
-                                   it comes from. Please provide a collection name.")
+                raise ConfigError("You declared a bin id but anvi'o doesn't know which collection "
+                                  "it comes from. Please provide a collection name.")
             splits_of_interest = ccollections.GetSplitNamesInBins(self.args).get_split_names_only()
 
         elif split_source == "split_names":
@@ -839,8 +873,8 @@ class VariabilitySuper(VariabilityFilter, object):
             splits_of_interest = set([c.strip().replace('\r', '') for c in open(splits_of_interest_path).readlines()])
 
         else:
-            raise ConfigError("Invalid split source '%s'. Expected 'split_names', 'bin_id', or\
-                               'gene_caller_ids'." % split_source)
+            raise ConfigError("Invalid split source '%s'. Expected 'split_names', 'bin_id', or "
+                              "'gene_caller_ids'." % split_source)
 
         return splits_of_interest
 
@@ -872,8 +906,8 @@ class VariabilitySuper(VariabilityFilter, object):
 
         if self.only_if_structure and not self.structure_db_path:
             self.progress.end()
-            raise ConfigError("You can't ask to only include genes with structures \
-                               (--only-if-structure) without providing a structure database.")
+            raise ConfigError("You can't ask to only include genes with structures "
+                              "(--only-if-structure) without providing a structure database.")
 
         self.progress.update('Checking the output file path ...')
         if self.output_file_path:
@@ -905,18 +939,19 @@ class VariabilitySuper(VariabilityFilter, object):
             if bad_gene_caller_ids:
                 self.progress.end()
                 some_to_report = bad_gene_caller_ids[:5] if len(bad_gene_caller_ids) <= 5 else bad_gene_caller_ids
-                raise ConfigError("{} of the gene caller ids you provided {} not {}. {}: {}. You only have 2 lives left.\
-                                   2 more mistakes, and anvi'o will automatically uninstall itself. Yes, seriously :(".\
+                raise ConfigError("{} of the gene caller ids you provided {} not {}. {}: {}. You only have 2 lives left. "
+                                  "2 more mistakes, and anvi'o will automatically uninstall itself. Yes, seriously :(".\
                                    format(len(bad_gene_caller_ids),
                                           "is" if len(bad_gene_caller_ids) == 1 else "are",
                                           "in this variability table" if self.table_provided else "known to this contigs database",
                                           "Here are a few of those ids" if len(some_to_report) > 1 else "Its id is",
                                           ", ".join([str(x) for x in some_to_report])))
 
-        self.progress.update('Making sure you are not playing games ..')
+        self.progress.update('Making sure you are not playing games ...')
         if self.engine not in ['NT', 'CDN', 'AA']:
             raise ConfigError("Anvi'o doesn't know what to do with a engine on '%s' yet :/" % self.engine)
         self.table_structure = t.variable_nts_table_structure if self.engine ==  'NT' else t.variable_codons_table_structure
+        self.table_structure = ['entry_id'] + self.table_structure
 
         # set items of interest
         self.get_items()
@@ -944,6 +979,9 @@ class VariabilitySuper(VariabilityFilter, object):
         if self.append_structure_residue_info and self.engine not in ["AA", "CDN"]:
             raise ConfigError('You provided a structure database, which is only compatible with --engine AA and --engine CDN')
 
+        if self.include_additional_data_in_output and self.engine not in ["AA", "CDN"]:
+            raise ConfigError('Currently, --include-additional-data is only implemented for --engine AA and --engine CDN')
+
         self.progress.update('Making sure our databases are compatible ..')
         utils.is_profile_db_and_contigs_db_compatible(self.profile_db_path, self.contigs_db_path)
         if self.append_structure_residue_info:
@@ -951,20 +989,20 @@ class VariabilitySuper(VariabilityFilter, object):
 
         if self.min_coverage_in_each_sample and not self.quince_mode:
             self.progress.end()
-            raise ConfigError("When you specify a coverage value through --min-coverage-in-each-sample, you must also\
-                                use --quince-mode flag, since the former parameter needs to know the coverage values in all\
-                                samples even if variation is reported for only one sample among others. This is the only way\
-                                to figure out whether variation is not reported for other samples due to low or zero coverage,\
-                                or there was no variation to report despite the high coverage. Anvi'o could turn --quince-mode\
-                                flat automatically for you, but it is much better if you have full control and understanding\
-                                of what is going on.")
+            raise ConfigError("When you specify a coverage value through --min-coverage-in-each-sample, you must also "
+                               "use --quince-mode flag, since the former parameter needs to know the coverage values in all "
+                               "samples even if variation is reported for only one sample among others. This is the only way "
+                               "to figure out whether variation is not reported for other samples due to low or zero coverage, "
+                               "or there was no variation to report despite the high coverage. Anvi'o could turn --quince-mode "
+                               "flat automatically for you, but it is much better if you have full control and understanding "
+                               "of what is going on.")
 
         if self.quince_mode:
             self.progress.update('Accessing auxiliary data file ...')
             auxiliary_data_file_path = dbops.get_auxiliary_data_path_for_profile_db(self.profile_db_path)
             if not os.path.exists(auxiliary_data_file_path):
-                raise ConfigError("Anvi'o needs the auxiliary data file to run this program with '--quince-mode' flag.\
-                                    However it wasn't found at '%s' :/" % auxiliary_data_file_path)
+                raise ConfigError("Anvi'o needs the auxiliary data file to run this program with '--quince-mode' flag. "
+                                   "However it wasn't found at '%s' :/" % auxiliary_data_file_path)
             self.merged_split_coverage_values = auxiliarydataops.AuxiliaryDataForSplitCoverages(auxiliary_data_file_path, None, ignore_hash=True)
 
         self.input_file_path = '/' + '/'.join(os.path.abspath(self.profile_db_path).split('/')[:-1])
@@ -976,18 +1014,28 @@ class VariabilitySuper(VariabilityFilter, object):
 
         if not profile_db.meta['SNVs_profiled']:
             self.progress.end()
-            raise ConfigError("Well well well. It seems SNVs were not characterized for this profile database.\
-                                Sorry, there is nothing to report here!")
+            raise ConfigError("Well well well. It seems SNVs were not characterized for this profile database. "
+                               "Sorry, there is nothing to report here!")
 
         profile_db.disconnect()
         self.progress.end()
 
 
     def gen_sqlite_where_clause_for_variability_table(self):
-        """It is impractical to load the entire variability table and then filter it according to our
-           splits_of_interest, sample_ids_of_interest, and genes_of_interest. For example, what if
-           genes_of_interest = set([0]) in a profile database with 50,000 genes? Why is splits of interest
-           not included here? Because split_name is not a column in the variable codon table."""
+        """Gen sqlite query to avoid loading in entire variability table
+
+        It is impractical to load the entire variability table and then filter it according to our
+        splits_of_interest, sample_ids_of_interest, and genes_of_interest. For example, if
+        genes_of_interest is a single gene in a variability table with 6.7 million genes, we should
+        use sqlite filters to avoid clogging memory usage to load the entire 6.7M genes' worth of
+        data into memory.
+
+        Notes
+        =====
+        - FIXME. `variable_codons` does not have a `splits_of_interest` column, but it should (just
+          as `variable_nucleotides` does). This prevents us fom SQL-querying by splits of interest.
+        """
+
         R = lambda x, y: self.run.info("%s that variability data will be fetched for" % \
                          (x.capitalize() if len(y)<200 else "Num of "+x), ", ".join([str(z) for z in y]) if len(y)<200 else len(y))
 
@@ -1025,6 +1073,7 @@ class VariabilitySuper(VariabilityFilter, object):
 
     def load_variability_data(self):
         """Populates self.data (type pandas.DataFrame) from profile database tables."""
+
         if self.table_provided:
             return
 
@@ -1034,38 +1083,78 @@ class VariabilitySuper(VariabilityFilter, object):
         self.progress.update('Reading the profile database ...')
         profile_db = dbops.ProfileDatabase(self.profile_db_path)
 
+        if not profile_db.meta['merged'] and self.quince_mode:
+            self.progress.end()
+            raise ConfigError("You have selected --quince-mode, and you're very cool for doing so. But "
+                              "your profile database `%s` is not a merged profile database, so it contains "
+                              "only one sample. That don't make good sense." % self.profile_db_path)
+
         if self.engine == 'NT':
             self.data = profile_db.db.get_table_as_dataframe(t.variable_nts_table_name,
-                                                             table_structure=self.table_structure,
-                                                             where_clause=sqlite_where_clause)
+                                                             columns_of_interest=self.table_structure,
+                                                             where_clause=sqlite_where_clause,
+                                                             error_if_no_data=False)
+            self.check_if_data_is_empty()
 
         elif self.engine == 'CDN' or self.engine == 'AA':
             if not profile_db.meta['SCVs_profiled']:
+                self.progress.end()
                 raise ConfigError("It seems codon frequencies were not computed for this profile database,\
                                    therefore there is nothing to report here for codon or amino acid variability\
                                    profiles :(")
 
             self.data = profile_db.db.get_table_as_dataframe(t.variable_codons_table_name,
-                                                             where_clause=sqlite_where_clause)
+                                                             where_clause=sqlite_where_clause,
+                                                             error_if_no_data=False)
             self.check_if_data_is_empty()
 
             # this is where magic happens for the AA engine. we just read the data from the variable codons table, and it
             # needs to be turned into AAs if the engine is AA.
             if self.engine == 'AA':
+                self.progress.end()
                 self.convert_item_coverages()
                 self.convert_reference_info()
 
-            # FIXME should this be in the variability table to begin with?
+            # FIXME this is in the NT variability table, and should bein the SCV table as well
             self.data["split_name"] = self.data["corresponding_gene_call"].apply(lambda x: self.gene_callers_id_to_split_name_dict[x])
 
         self.data["codon_number"] = utils.convert_sequence_indexing(self.data["codon_order_in_gene"], source="M0", destination="M1")
+        self.data["codon_number"] = self.data["codon_number"].astype(int)
 
         # we're done here. bye.
         profile_db.disconnect()
         self.progress.end()
 
 
+    def load_additional_data(self):
+        """Loads additional data from the contigs db as self.additional_data"""
+
+        if not self.include_additional_data_in_output:
+            return
+
+        self.progress.new('Loading additional data')
+        self.progress.update('Fetching dataframe ...')
+
+        args = argparse.Namespace(contigs_db=self.contigs_db_path)
+        self.ad = TableForAminoAcidAdditionalData(args)
+        self.additional_data = self.ad.get_multigene_dataframe(self.genes_of_interest)
+        self.additional_data.rename(columns={'gene_callers_id': 'corresponding_gene_call'}, inplace=True)
+
+        if self.additional_data.empty:
+            self.run.warning("There is no additional data in the `amino_acid_additional_data` table of your contigs db "
+                             "that matches your genes of interest. Therefore no additional data will be output, despite your "
+                             "flag --include-additional-data.")
+            self.include_additional_data_in_output = False
+            self.progress.end()
+            return
+
+        self.genes_with_additional_data = set(self.additional_data['corresponding_gene_call'].unique())
+        self.progress.end()
+
+
     def load_structure_data(self):
+        """Loads structure residue info from structure db as self.structure_residue_info"""
+
         if not self.append_structure_residue_info:
             return
 
@@ -1073,7 +1162,8 @@ class VariabilitySuper(VariabilityFilter, object):
         self.progress.new('Loading structure information')
         self.progress.update('Reading the structure database ...')
         structure_db = structureops.StructureDatabase(self.structure_db_path)
-        self.structure_residue_info = structure_db.db.get_table_as_dataframe(t.structure_residue_info_table_name)
+
+        self.structure_residue_info = structure_db.get_residue_info_for_all()
 
         self.genes_with_structure = set(self.structure_residue_info["corresponding_gene_call"].unique())
         # genes_included = genes_of_interest, unless genes_of_interest weren't specified. then
@@ -1085,9 +1175,9 @@ class VariabilitySuper(VariabilityFilter, object):
 
         if not genes_with_var_and_struct:
             self.progress.end()
-            raise ConfigError("There is no overlap between genes that have structures and genes that have variability.\
-                               Consider changing things upstream in your workflow or do not provide the structure db.\
-                               Here are the genes in your structure database: {}".\
+            raise ConfigError("There is no overlap between genes that have structures and genes that have variability. "
+                              "Consider changing things upstream in your workflow or do not provide the structure db. "
+                              "Here are the genes in your structure database: {}".\
                                format(", ".join([str(x) for x in self.genes_with_structure])))
 
         if self.only_if_structure:
@@ -1101,6 +1191,9 @@ class VariabilitySuper(VariabilityFilter, object):
 
     def check_if_data_is_empty(self):
         if self.data.empty:
+            if self.progress.pid is not None:
+                self.progress.end()
+
             raise self.EndProcess
 
 
@@ -1123,21 +1216,21 @@ class VariabilitySuper(VariabilityFilter, object):
 
         if not any(list(requested_split_source.values())):
             self.progress.end()
-            raise ConfigError("You must specify a list of genes (with --gene-caller-ids or\
-                               --genes-of-interest), OR a list of splits (--splits-of-interest), OR\
-                               a collection and bin combo (--collection-name and bin-id). You\
-                               supplied none of these parameters and so anvi'o doesn't know what you\
-                               want. If you are truly interested in everything, you\
-                               should run the script anvi-script-add-default-collection, and then\
-                               supply the collection name 'DEFAULT' and the bin id 'EVERYTHING'.")
+            raise ConfigError("You must specify a list of genes (with --gene-caller-ids or "
+                              "--genes-of-interest), OR a list of splits (--splits-of-interest), OR "
+                              "a collection and bin combo (--collection-name and bin-id). You "
+                              "supplied none of these parameters and so anvi'o doesn't know what you "
+                              "want. If you are truly interested in everything, you "
+                              "should run the script anvi-script-add-default-collection, and then "
+                              "supply the collection name 'DEFAULT' and the bin id 'EVERYTHING'.")
 
         if sum(list(requested_split_source.values())) > 1:
             self.progress.end()
-            raise ConfigError("You must specify a list of genes (with --gene-caller-ids or\
-                               --genes-of-interest), OR a list of splits (--splits-of-interest), OR a\
-                               collection and bin combo (--collection-name and bin-id). You\
-                               supplied too many of these parameters, and now anvi'o doesn't\
-                               know what you want.")
+            raise ConfigError("You must specify a list of genes (with --gene-caller-ids or "
+                              "--genes-of-interest), OR a list of splits (--splits-of-interest), OR a "
+                              "collection and bin combo (--collection-name and bin-id). You "
+                              "supplied too many of these parameters, and now anvi'o doesn't "
+                              "know what you want.")
 
         self.split_source = None
         for source in requested_split_source:
@@ -1148,12 +1241,13 @@ class VariabilitySuper(VariabilityFilter, object):
 
     def is_available_samples_compatible_with_sample_ids_of_interest(self):
         self.run.info("Samples available", ", ".join(sorted(self.available_sample_ids)), progress=self.progress)
+
         if self.sample_ids_of_interest:
             samples_missing = [sample_id for sample_id in self.sample_ids_of_interest if sample_id not in self.available_sample_ids]
             if len(samples_missing):
                 self.progress.end()
-                raise ConfigError('One or more samples you are interested in seem to be missing from\
-                                   the %s: %s' % ('variability table' if self.table_provided else 'profile database',
+                raise ConfigError('One or more samples you are interested in seem to be missing from '
+                                  'the %s: %s' % ('variability table' if self.table_provided else 'profile database',
                                                   ', '.join(samples_missing)))
 
             self.available_sample_ids = sorted(list(self.sample_ids_of_interest))
@@ -1287,7 +1381,7 @@ class VariabilitySuper(VariabilityFilter, object):
         # method="first" ensures alphabetic ordering in the case of ties. Convert the rank DataFrame
         # into a numpy array, and find the order of indices that sort each entry's items based on
         # their ranks. type(ranks) = pd.DataFrame, type(item_index_order) = numpy array
-        ranks = self.data.loc[entry_ids, self.items].rank(ascending=False, axis=1, method="first").astype(int)
+        ranks = self.data.loc[entry_ids, self.items].astype(int).rank(ascending=False, axis=1, method="first").astype(int)
         item_index_order = np.argsort(ranks.values, axis=1)
 
         # the first and second most common items, according to the 2nd convention in the docstring,
@@ -1577,6 +1671,54 @@ class VariabilitySuper(VariabilityFilter, object):
         return unique_positions_and_frequencies_dict
 
 
+    def filter_batch_parameters(self, filter_params, name='data'):
+        """Filter based on many simultaneous parameters()
+
+        Parameters
+        ==========
+        filter_params : dict
+            The dictionary containing all of the filtering parameters. An extensive example is shown here:
+            {'departure_from_consensus': {'min_departure_from_consensus': '0',
+            'max_departure_from_consensus': '1'}, 'departure_from_reference':
+            {'min_departure_from_reference': '0', 'max_departure_from_reference': '1'}, 'n2n1ratio':
+            {'min_n2n1ratio': '0.01', 'max_n2n1ratio': '1.01'}, 'coverage': {'min_coverage': '8',
+            'max_coverage': '2030'}, 'entropy': {'min_entropy': '0', 'max_entropy': '0.96'},
+            'rel_solvent_acc': {'min_rel_solvent_acc': '0', 'max_rel_solvent_acc': '1'},
+            'sec_struct': {'sec_structs_of_interest': ['C', 'S', 'G', 'H', 'T', 'I', 'E', 'B']},
+            'phi': {'min_phi': '-180', 'max_phi': '180'}, 'psi': {'min_psi': '-180', 'max_psi':
+            '180'}, 'BLOSUM62': {'min_BLOSUM62': '-4', 'max_BLOSUM62': '11'}, 'BLOSUM90':
+            {'min_BLOSUM90': '-6', 'max_BLOSUM90': '11'}, 'codon_order_in_gene':
+            {'min_codon_order_in_gene': '0', 'max_codon_order_in_gene': '396'}, 'codon_number':
+            {'min_codon_number': '1', 'max_codon_number': '397'}, 'competing_aas':
+            {'competing_aass_of_interest': ['IleVal', 'AspGlu', 'AlaSer', 'ArgLys', 'AlaGly',
+            'AspThr', 'MetVal', 'SerThr', 'AsnSer', 'IleLeu', 'AlaVal', 'LeuMet', 'LeuVal',
+            'PheTyr', 'AlaThr', 'AsnThr', 'ProThr', 'AsnLys', 'ProSer', 'CysVal', 'GlnSer',
+            'GlnLys', 'GlyLys', 'IleThr', 'GluSer', 'LysThr', 'AlaPro', 'HisPhe', 'IleMet',
+            'GlnGlu', 'ThrVal']}, 'reference': {'references_of_interest': ['Ile', 'Ala', 'Asp',
+            'Val', 'Glu', 'Lys', 'Gly', 'Ser', 'Thr', 'Arg', 'Asn', 'Leu', 'Tyr', 'Pro', 'Gln',
+            'His']}, 'consensus': {'consensuss_of_interest': ['Ile', 'Ala', 'Glu', 'Val', 'Asp',
+            'Gly', 'Arg', 'Thr', 'Lys', 'Ser', 'Asn', 'Leu', 'Tyr', 'Pro', 'Gln', 'His']}}
+        name : str
+             the string representation of the data you want to filter. By default its 'data', such
+             that self.data is filtered. if you have another dataframe, e.g. self.merged, used
+             'merged'
+        """
+
+
+        if not filter_params:
+            return
+
+        list_of_filter_functions = []
+        F = lambda f, **kwargs: (f, kwargs)
+        for filter_criterion, param_values in filter_params.items():
+            for param_name, param_value in param_values.items():
+                setattr(self, param_name, param_value)
+            list_of_filter_functions.append(F(self.filter_data, name=name, criterion=filter_criterion))
+
+        # V/\
+        self.process(process_functions=list_of_filter_functions, exit_if_data_empty=False)
+
+
     def process(self, process_functions=None, exit_if_data_empty=True):
         """self.data is checked if empty after each function call. if exit_if_data_empty, exists,
            otherwise returns prematurely."""
@@ -1586,19 +1728,33 @@ class VariabilitySuper(VariabilityFilter, object):
         try:
             for func, kwargs in process_functions:
                 func(**kwargs)
-
         except self.EndProcess as e:
             msg = 'Nothing left in the variability data to work with. Quitting :/' if exit_if_data_empty else ''
             e.end(exit_if_data_empty, msg)
 
 
     def get_histogram(self, column, fix_offset=False, **kwargs):
-        """fix_offset can be provided if you're interested in returning the centre point of each bin
-           rather than the edges of each bin.
+        """Return a histogram (counts and bins) for a specified column of self.data
 
-           **kwargs are the optional arguments of np.histogram
-           (https://docs.scipy.org/doc/numpy-1.14.0/reference/generated/numpy.histogram.html)
+        Parameters
+        ==========
+        column : str
+            The name of the column you want to get a histogram for. Must be numeric type
+        fix_offset : bool, False
+            If True, bins is set as the centre point for each bin, rather than the bin edges.
+            This decreases the length of bins by 1, since there is one less bin that there are
+            bin edges.
+        **kwargs : dict, optional
+            Any arguments of np.histogram
+            (https://docs.scipy.org/doc/numpy-1.14.0/reference/generated/numpy.histogram.html)
+
+        Returns
+        =======
+        (values, bins) : tuple
+            values are the counts in each bin, bins are either bin edges (fix_offset=False) or
+            centre-points of the bins (fix_offset=True)
         """
+
         if not pd.api.types.is_numeric_dtype(self.data[column]):
             raise ConfigError("get_histogram :: %s is not of numeric type" % (column))
 
@@ -1621,22 +1777,72 @@ class VariabilitySuper(VariabilityFilter, object):
         return values, bins
 
 
-    def get_residue_structure_information(self):
+    def merge_additional_data(self):
+        """Merges self.additional_data with self.data
+
+        Notes
+        =====
+        - If by the end of all filtering there is no overlap between genes with variability and genes
+          with structure, this function raises a warning and the structure columns are not added to
+          the table. Otherwise this function appends the columns from residue_info to self.data
         """
-        If by the end of all filtering there is no overlap between genes with variability and genes
-        with structure, this function raises a warning and the structure columns are not added to
-        the table. Otherwise this function appends the columns from residue_info to self.data
+
+        if not self.include_additional_data_in_output:
+            return
+
+        genes_with_var = list(self.data["corresponding_gene_call"].unique())
+        genes_with_var_and_additional_data = [g for g in self.genes_with_additional_data if g in genes_with_var]
+        if not genes_with_var_and_additional_data:
+            self.run.warning("After filtering, there is no overlap between residues with "
+                             "variability and residues with additional data. As a result, "
+                             "no additional data columns will be added.")
+            self.include_additional_data_in_output = False
+            return
+
+        self.progress.new("Adding additional data")
+        self.progress.update("Merging columns...")
+
+        self.data = self.data.merge(
+            self.additional_data,
+            on=['corresponding_gene_call', 'codon_order_in_gene'],
+            how='left',
+        )
+
+        # There may be many columns in self.additional_data, many of which could have mostly NaN
+        # values. After filtering self.data, its possible that columns have _all_ NaN values, so we
+        # remove such columns
+        self.data.dropna(axis=1, how='all', inplace=True)
+
+        # Add types to output. This assumes each data_key has only 1 data_type, and it would be
+        # pretty messed up if that wasn't the case.
+        types = dict(zip(self.ad.df['data_key'], self.ad.df['data_type']))
+        dtypes_convert = {'str': str, 'int': int, 'float': float, 'stackedbar': str, 'unknown': str}
+        types = list(tuple({k: dtypes_convert[v] for k, v in types.items()}.items()))
+        self.columns_to_report['additional_data'].extend(types)
+
+        self.progress.end()
+
+
+    def merge_residue_structure_info(self):
+        """Merges self.structure_residue_info with self.data
+
+        Notes
+        =====
+        - If by the end of all filtering there is no overlap between genes with variability and genes
+          with structure, this function raises a warning and the structure columns are not added to
+          the table. Otherwise this function appends the columns from residue_info to self.data
         """
+
         if not self.append_structure_residue_info:
             return
 
         genes_with_var = list(self.data["corresponding_gene_call"].unique())
         genes_with_var_and_struct = [g for g in self.genes_with_structure if g in genes_with_var]
         if not genes_with_var_and_struct:
-            run.warning("Before filtering entries, there was an overlap between genes with\
-                         variability and genes with structuresr, however that is no longer the case. As a result,\
-                         no structure information columns will be added. Above you can see the number of genes\
-                         remaining with structures after each filtering step.")
+            run.warning("Before filtering entries, there was an overlap between genes with "
+                        "variability and genes with structures, however that is no longer the case. As a result, "
+                        "no structure information columns will be added. Above you can see the number of genes "
+                        "remaining with structures after each filtering step.")
             self.append_structure_residue_info = False
             return
 
@@ -1652,19 +1858,27 @@ class VariabilitySuper(VariabilityFilter, object):
 
         # add all known residue info sources to columns_to_report
         C = {'text': str, 'real': float, 'integer': int}
+
+        # append columns that are not redundant
         redundant_columns = ['entry_id', 'corresponding_gene_call', 'codon_order_in_gene', 'aa', 'amino_acid', 'codon', 'codon_number']
-
-        # append mandatory columns
-        self.columns_to_report['structural'].extend([(x, C[y]) for x, y in zip(t.structure_residue_info_table_structure, t.structure_residue_info_table_types) if x not in redundant_columns])
-
-        # append non-mandatory columns
-        for source in t.residue_info_sources:
-            self.columns_to_report['structural'].extend([(x, C[y]) for x, y in zip(t.residue_info_sources[source]["structure"], t.residue_info_sources[source]["types"]) if x not in redundant_columns])
+        self.columns_to_report['structural'].extend([(x, C[y])
+                                                     for x, y in zip(t.residue_info_table_structure, t.residue_info_table_types)
+                                                     if x not in redundant_columns
+                                                     and x in self.structure_residue_info.columns])
 
         self.progress.end()
 
 
     def compute_gene_coverage_fields(self):
+        """Adds _gene_ coverage, not position coverage, to self.data.
+
+        Notes
+        =====
+        - Expensive operation
+        - Redundant (gene coverage is added to EVERY entry)
+        - Adds gene_coverage, non_outlier_gene_coverage, non_outlier_gene_coverage_std,
+          and mean_normalized_coverage
+        """
         if not self.compute_gene_coverage_stats:
             return
 
@@ -1740,10 +1954,10 @@ class VariabilitySuper(VariabilityFilter, object):
 
         new_structure, _ = self.get_data_column_structure()
 
-        if not self.include_contig_names_in_output:
+        if not self.include_contig_names_in_output and 'contig_name' in new_structure:
             new_structure.remove('contig_name')
 
-        if not self.include_split_names_in_output:
+        if not self.include_split_names_in_output and 'split_name' in new_structure:
             new_structure.remove('split_name')
 
         # Update entry_id with sequential numbers based on the final ordering of the data:
@@ -1754,7 +1968,7 @@ class VariabilitySuper(VariabilityFilter, object):
         data = data.sort_values(by = ["corresponding_gene_call", "codon_order_in_gene"])
 
         self.progress.update('exporting variable positions table as a TAB-delimited file ...')
-        utils.store_dataframe_as_TAB_delimited_file(data, self.args.output_file, columns=new_structure)
+        utils.store_dataframe_as_TAB_delimited_file(data, self.output_file_path, columns=new_structure)
         self.progress.end()
 
         self.run.info('Num entries reported', pp(len(data.index)))
@@ -1771,6 +1985,12 @@ class VariabilitySuper(VariabilityFilter, object):
         for column_group, columns in self.columns_to_report.items():
             for column, data_type in columns:
                 if column in data.columns:
+                    if column in structure:
+                        self.run.warning(f"Wow. Very sorry to have caught things this late, but there was no other way. "
+                                         f"There are some columns in your output report that appear twice. This probably "
+                                         f"occurred because an additional data column in your contigs database has the same "
+                                         f"name as one of the standard column outputs of anvi-gen-variability-table. This "
+                                         f"column was named '{column}'. The results may be garbled due to this. Sorry :(")
                     structure.append(column)
                     data_types.append(data_type)
         return structure, data_types
@@ -1784,7 +2004,7 @@ class VariabilitySuper(VariabilityFilter, object):
                    message to user
             """
             if msg:
-                run.info_single(msg, 'red', 1, 1)
+                run.info_single(msg, mc='red', nl_before=1, nl_after=1)
             if exit:
                 sys.exit()
 
@@ -1866,7 +2086,7 @@ class NucleotidesEngine(dbops.ContigsSuperclass, VariabilitySuper):
                 gene_length = self.get_gene_length(corresponding_gene_call)
                 codon_order_in_gene = unique_pos_identifier_to_codon_order_in_gene[unique_pos_identifier]
 
-                in_partial_gene_call, in_complete_gene_call, base_pos_in_codon = self.get_nt_position_info(contig_name_name, pos_in_contig)
+                in_noncoding_gene_call, in_coding_gene_call, base_pos_in_codon = self.get_nt_position_info(contig_name_name, pos_in_contig)
 
                 for sample_id in splits_to_consider_dict[split][pos]:
                     new_entries[next_available_entry_id] = {'entry_id': next_available_entry_id,
@@ -1876,8 +2096,8 @@ class NucleotidesEngine(dbops.ContigsSuperclass, VariabilitySuper):
                                                             'A': 0, 'T': 0, 'C': 0, 'G': 0, 'N': 0,
                                                             'pos': pos,
                                                             'pos_in_contig': pos_in_contig,
-                                                            'in_partial_gene_call': in_partial_gene_call,
-                                                            'in_complete_gene_call': in_complete_gene_call,
+                                                            'in_noncoding_gene_call': in_noncoding_gene_call,
+                                                            'in_coding_gene_call': in_coding_gene_call,
                                                             'base_pos_in_codon': base_pos_in_codon,
                                                             'coverage': split_coverage_across_samples[sample_id][pos],
                                                             'sample_id': sample_id,
@@ -1889,9 +2109,17 @@ class NucleotidesEngine(dbops.ContigsSuperclass, VariabilitySuper):
                                                             'corresponding_gene_call': corresponding_gene_call,
                                                             'gene_length': gene_length,
                                                             'codon_order_in_gene': codon_order_in_gene,
+                                                            'codon_number': codon_order_in_gene + 1,
                                                             'split_name': split}
                     new_entries[next_available_entry_id][base_at_pos] = split_coverage_across_samples[sample_id][pos]
                     next_available_entry_id += 1
+
+        if not new_entries:
+            # There was no new entries. Probably this profile database is not merged, or the region
+            # of interest is very small and variability is present across all samples
+            self.progress.end()
+            self.report_change_in_entry_number(self.data.shape[0], self.data.shape[0], reason="quince mode")
+            return
 
         # convert to pandas DataFrame (its faster to build and convert a dictionary than to build
         # DataFrame row by row).
@@ -1912,21 +2140,21 @@ class NucleotidesEngine(dbops.ContigsSuperclass, VariabilitySuper):
         self.data = self.data[column_order]
         entries_after = len(self.data.index)
 
-        # fill in additional fields for new entries. compute_additional_fields takes a list of
-        # entry_ids to consider for self.data, which here is provided from new_entries (what I'm
-        # saying is new_entries is not passed, only the entry_id's in new_entries
         self.progress.end()
+
+        # new entries are now in self.data, but are missing additional fields, that are calculated here
         self.compute_additional_fields(list(new_entries["entry_id"]))
 
         self.report_change_in_entry_number(entries_before, entries_after, reason="quince mode")
 
 
+
 class QuinceModeWrapperForFancyEngines(object):
     """A base class to recover quince mode data for both CDN and AA engines.
 
-       This wrapper exists outside of the actual classes for these engines since
-       the way they recover these frequencies is pretty much identical except one
-       place where the engine needs to be specifically.
+    This wrapper exists outside of the actual classes for these engines since
+    the way they recover these frequencies is pretty much identical except one
+    place where the engine needs to be specifically.
     """
     def __init__(self):
         if self.engine not in ['CDN', 'AA']:
@@ -1996,6 +2224,7 @@ class QuinceModeWrapperForFancyEngines(object):
                                                             'corresponding_gene_call': corresponding_gene_call,
                                                             'gene_length': gene_length,
                                                             'codon_order_in_gene': codon_order_in_gene,
+                                                            'codon_number': codon_order_in_gene + 1,
                                                             'departure_from_reference': 0,
                                                             'coverage': None,
                                                             'reference': reference_item}
@@ -2092,6 +2321,10 @@ class AminoAcidsEngine(dbops.ContigsSuperclass, VariabilitySuper, QuinceModeWrap
         self.data['reference'] = self.data['reference'].map(constants.codon_to_AA)
         self.data['departure_from_reference'] = self.data.apply(lambda entry: 1.0 - entry[entry["reference"]] / entry["coverage"], axis=1)
 
+        # This filters out positions that were variable as codons, but are non-varying as amino acids
+        smallest_float = np.finfo(np.float).eps
+        self.filter_data(criterion='departure_from_reference', min_filter=smallest_float, min_condition=True)
+
 
 class CodonsEngine(dbops.ContigsSuperclass, VariabilitySuper, QuinceModeWrapperForFancyEngines):
     def __init__(self, args={}, p=progress, r=run):
@@ -2161,16 +2394,16 @@ class ConsensusSequences(NucleotidesEngine, AminoAcidsEngine):
         self.sequence_name_key = 'gene_caller_id' if not self.contigs_mode else 'contig_name'
 
         if not self.engine:
-            raise ConfigError("You somehow managed to call the ConsensusSequences class with an args object that does not\
-                               contain an engine variable. Not appropriate.")
+            raise ConfigError("You somehow managed to call the ConsensusSequences class with an args object that does not "
+                              "contain an engine variable. Not appropriate.")
 
         if self.engine != 'NT':
             raise ConfigError("Currently the only available variability engine for this is 'NT'. You provided %s" % self.engine)
 
         if self.compress_samples:
             args.quince_mode = True
-            self.run.warning("You supplied --compress-samples, so coverage at each variant position for all sample needs to be\
-                              calculated. This will take significantly longer.")
+            self.run.warning("You supplied --compress-samples, so coverage at each variant position for all sample needs to be "
+                             "calculated. This will take significantly longer.")
         else:
             args.min_departure_from_reference = 0.5 # if < 0.5, consensus is guaranteed to be reference
                                                     # shortcut only used when not compressing samples
@@ -2208,14 +2441,14 @@ class ConsensusSequences(NucleotidesEngine, AminoAcidsEngine):
             self.data = pd.DataFrame(collapsed_coverage_counts, columns=coverage_columns).reset_index(drop=True)
             self.data[data_append.columns] = data_append
             self.data['sample_id'] = 'merged'
-            self.data['consensus'] = self.data[self.items].idxmax(axis=1)
+            self.data['consensus'] = self.data[self.items].astype(int).idxmax(axis=1)
 
         # no data no play.
         if not len(self.data):
-            raise ConfigError("ConsensusSequences class is upset because it doesn't have any data. There can be two reasons\
-                               to this. One, anvi'o variability engines reported nothing (in which case you should have gotten\
-                               an error much earler). Two, you are a programmer and failed to call the 'process()' on your\
-                               instance from this class. Do you see how the second option is much more likely? :/")
+            raise ConfigError("ConsensusSequences class is upset because it doesn't have any data. If you are a user, this means "
+                              "the sequence(s) you are interested in has/have no sequence variability, so there is really nothig "
+                              "to do here... If you are a programmer and failed to call 'process()' on your "
+                              "instance from this class, you may also see this message.")
 
         # learn about the sequences, either contigs or genes
         if self.contigs_mode:
@@ -2227,7 +2460,7 @@ class ConsensusSequences(NucleotidesEngine, AminoAcidsEngine):
                 _, d = self.get_sequences_for_gene_callers_ids([gene_callers_id])
                 sequences[gene_callers_id] = d[gene_callers_id]['sequence'].lower()
 
-        # here we populate a dictionary with all the right items but witout any real data.
+        # here we populate a dictionary with all the right items but without any real data.
         sample_names = set(self.data['sample_id'])
         for sample_name in sample_names:
             self.sequence_variants_in_samples_dict[sample_name] = {}
@@ -2370,8 +2603,8 @@ class VariabilityNetwork:
 
     def generate(self):
         if not self.data:
-            raise ConfigError("There is nothing to report. Either the input file you provided was empty, or you\
-                                haven't filled in the variable positions data into the class.")
+            raise ConfigError("There is nothing to report. Either the input file you provided was empty, or you "
+                               "haven't filled in the variable positions data into the class.")
 
         if self.max_num_unique_positions < 0:
             raise ConfigError("Max number of unique positions cannot be less than 0.. Obviously :/")
@@ -2382,10 +2615,10 @@ class VariabilityNetwork:
         if self.samples_information_dict:
             samples_missing_in_information_dict = [s for s in self.samples if s not in self.samples_information_dict]
             if len(samples_missing_in_information_dict):
-                raise ConfigError("The sample names you provided in the samples information data is not a subset of\
-                                    sample names found in the variable positions data :/ Essentially, every sample name\
-                                    appears in the variability data must be present in the samples information data,\
-                                    however, you are missing these ones from your samples information: %s."\
+                raise ConfigError("The sample names you provided in the samples information data is not a subset of "
+                                   "sample names found in the variable positions data :/ Essentially, every sample name "
+                                   "appears in the variability data must be present in the samples information data, "
+                                   "however, you are missing these ones from your samples information: %s."\
                                                 % (', '.join(samples_missing_in_information_dict)))
 
         self.unique_variable_nt_positions = set([e['unique_pos_identifier'] for e in list(self.data.values())])
@@ -2419,7 +2652,7 @@ class VariabilityNetwork:
 
 
 class VariabilityData(NucleotidesEngine, CodonsEngine, AminoAcidsEngine):
-    def __init__(self, args={}, p=progress, r=run, dont_process=False, skip_init_commons=False):
+    def __init__(self, args={}, p=progress, r=run, dont_process=False, skip_init_commons=False, skip_sanity=True):
         self.progress = p
         self.run = r
 
@@ -2427,6 +2660,7 @@ class VariabilityData(NucleotidesEngine, CodonsEngine, AminoAcidsEngine):
         A = lambda x, t: t(args.__dict__[x]) if x in args.__dict__ else None
         self.columns_to_load = A('columns_to_load', list)
         self.variability_table_path = A('variability_profile', str)
+        self.skip_superclass_sanity = skip_sanity
         self.engine = A('engine', str)
 
         self.dont_process = dont_process
@@ -2438,8 +2672,8 @@ class VariabilityData(NucleotidesEngine, CodonsEngine, AminoAcidsEngine):
         # determine the engine type of the variability table
         inferred_engine = utils.get_variability_table_engine_type(self.variability_table_path)
         if self.engine and self.engine != inferred_engine:
-            raise ConfigError("The engine you requested is {0}, but the engine inferred from {1} is {2}.\
-                               Explicitly declare the inferred engine type (--engine {2})".\
+            raise ConfigError("The engine you requested is {0}, but the engine inferred from {1} is {2}. "
+                              "Explicitly declare the inferred engine type (--engine {2})".\
                                format(self.engine, self.variability_table_path, inferred_engine))
         self.engine = inferred_engine
 
@@ -2463,6 +2697,7 @@ class VariabilityData(NucleotidesEngine, CodonsEngine, AminoAcidsEngine):
 
     def load_data(self):
         """load the variability data (output of anvi-gen-variabliity-profile)"""
+
         self.data = pd.read_csv(self.variability_table_path, sep="\t", usecols=self.columns_to_load)
 
 
@@ -2473,7 +2708,7 @@ class VariabilityData(NucleotidesEngine, CodonsEngine, AminoAcidsEngine):
         # init the appropriate engine
         self.args.data = self.data
         self.args.engine = self.engine
-        self.args.skip_sanity_check = True
+        self.args.skip_sanity_check = self.skip_superclass_sanity
         variability_engines[self.engine].__init__(self, self.args, p=self.progress, r=self.run)
 
         # load residue info data
@@ -2481,13 +2716,15 @@ class VariabilityData(NucleotidesEngine, CodonsEngine, AminoAcidsEngine):
             self.load_structure_data()
 
 
-class VariabilityFixationIndex():
-    """
+class VariabilityFixationIndex(object):
+    """Calculates a fixation index matrix
+
     Metric adapted from 'Genomic variation landscape of the human gut microbiome'
     (https://media.nature.com/original/nature-assets/nature/journal/v493/n7430/extref/nature11711-s1.pdf)
     which extends the traditional metric to allow for multiple alleles in one site. We further
     extend to allow for codon and amino acid alleles.
     """
+
     def __init__(self, args={}, p=progress, r=run):
         self.progress = p
         self.run = r
@@ -2500,6 +2737,39 @@ class VariabilityFixationIndex():
         self.contigs_db_path = A('contigs_db', null)
         self.variability_table_path = A('variability_profile', null)
         self.keep_negatives = A('keep_negatives', null)
+        self.min_coverage_in_each_sample = A('min_coverage_in_each_sample', null)
+
+        min_cov_default = 10
+
+        if not self.min_coverage_in_each_sample:
+            self.min_coverage_in_each_sample = min_cov_default
+            self.run.warning("--min-coverage-in-each-sample is a required parameter. Anvi'o has set this "
+                             "to %d on your behalf." % min_cov_default)
+
+        if self.min_coverage_in_each_sample < 1:
+            raise ConfigError("--min-coverage-in-each-sample must be greater than 0.")
+
+        if self.variability_table_path:
+            self.run.warning("You provided an already produced variability table, which anvi'o "
+                             "credits you for. However, this program requires information about the "
+                             "coverage information at each position in each sample, even if that "
+                             "position did not vary in the sample. The only way your externally "
+                             "provided table contains this information is if you produced it with the "
+                             "--quince-mode flag. If you didn't provide this flag, your options are "
+                             "(1) re-run anvi-gen-variability-profile with --quince-mode (slow but "
+                             "recommended), (2) instead of providing a variability table to this "
+                             "program, provide a profile and contigs database and the required "
+                             "table will be created (--quince-mode will automatically be activated). "
+                             "or (3) ignore this warning and proceed with caution (in this case "
+                             "please don't cite us).")
+        else:
+            self.args.quince_mode = True
+            self.run.warning("Anvi'o requires information about the coverage information at each position "
+                             "in each sample, even if that position did not vary in the sample. The way "
+                             "anvi'o gets this information is a long and slow process. Sorry :(. If you "
+                             "already have a variability table generated with anvi-gen-variability-profile "
+                             "along with the --quince-mode parameter, you can and should use that as input "
+                             "to this program.")
 
         args_for_variability_class = self.args
         if self.variability_table_path:
@@ -2507,15 +2777,15 @@ class VariabilityFixationIndex():
                 delattr(args_for_variability_class, 'contigs_db')
             if self.profile_db_path:
                 delattr(args_for_variability_class, 'profile_db')
-                self.run.warning('You supplied a variability table, but also a profile database.\
-                                  Any variability data used by anvi\'o will be drawn from the variability\
-                                  table, and not from this database.')
-            self.v = VariabilityData(args_for_variability_class, p=self.progress, r=self.run)
+                self.run.warning('You supplied a variability table, but also a profile database. '
+                                 'Any variability data used by anvi\'o will be drawn from the variability '
+                                 'table, and not from this database.')
+            self.v = VariabilityData(args_for_variability_class, p=self.progress, r=self.run, skip_sanity=False)
         else:
             self.v = variability_engines[self.engine](args_for_variability_class, p=self.progress, r=self.run)
 
         self.items_dict = {
-            'NT': [nt for nt in constants.nucleotides if nt != 'N'],
+            'NT': constants.nucleotides,
             'CDN': constants.codons,
             'AA': constants.amino_acids
         }
@@ -2529,10 +2799,8 @@ class VariabilityFixationIndex():
 
 
     def fill_missing_entries(self, pairwise_data, sample_1, sample_2):
-        missing_data = {column: [] for column in pairwise_data.columns}
-
-        data_sample_1 = pairwise_data[pairwise_data['sample_id'] == sample_1].set_index('unique_pos_identifier', drop = True)
-        data_sample_2 = pairwise_data[pairwise_data['sample_id'] == sample_2].set_index('unique_pos_identifier', drop = True)
+        data_sample_1 = pairwise_data[pairwise_data['sample_id'] == sample_1].set_index('unique_pos_identifier', drop=True)
+        data_sample_2 = pairwise_data[pairwise_data['sample_id'] == sample_2].set_index('unique_pos_identifier', drop=True)
 
         positions_sample_1 = set(data_sample_1.index)
         positions_sample_2 = set(data_sample_2.index)
@@ -2561,27 +2829,42 @@ class VariabilityFixationIndex():
         output_file_path = self.v.output_file_path
 
         self.progress.new('Saving output')
-        self.progress.update('...'.format(output_file_path))
+        self.progress.update('...')
         utils.store_dataframe_as_TAB_delimited_file(self.fst_matrix, output_file_path, include_index=True, index_label='')
         self.run.info('Output', output_file_path, progress = self.progress)
         self.progress.end()
 
 
     def process(self):
+        self.v.items = self.items_dict[self.engine]
+
         if self.v.table_provided:
-            self.v.items = self.items_dict[self.engine]
-            self.v.data = self.v.data[self.columns_of_interest]
-            self.v.convert_counts_to_frequencies()
-            self.compute_FST_matrix()
+            try:
+                self.v.filter_data(criterion = "sample_id",
+                                   subset_filter = self.v.sample_ids_of_interest,
+                                   subset_condition = self.v.sample_ids_of_interest and self.v.load_all_samples)
+                self.v.filter_data(criterion = "corresponding_gene_call",
+                                   subset_filter = self.v.genes_of_interest,
+                                   subset_condition = self.v.genes_of_interest and self.v.load_all_genes)
+                self.v.filter_data(function=self.v.filter_by_minimum_coverage_in_each_sample)
+            except self.v.EndProcess:
+                raise ConfigError("After filtering, no positions remain. See the filtering summary above.")
         else:
             self.v.init_commons()
-            self.v.items = self.items_dict[self.engine]
             self.v.load_variability_data()
-            self.v.apply_preliminary_filters()
-            self.v.set_unique_pos_identification_numbers()
-            self.v.data = self.v.data[self.columns_of_interest]
-            self.v.convert_counts_to_frequencies()
-            self.compute_FST_matrix()
+
+            try:
+                self.v.apply_preliminary_filters()
+                self.v.set_unique_pos_identification_numbers()
+                self.v.recover_base_frequencies_for_all_samples()
+                self.v.filter_data(function=self.v.filter_by_minimum_coverage_in_each_sample)
+            except self.v.EndProcess:
+                raise ConfigError("After filtering, no positions remain. See the filtering summary above.")
+
+        # We got our data. We don't care how we got it
+        self.v.data = self.v.data[self.columns_of_interest]
+        self.v.convert_counts_to_frequencies()
+        self.compute_FST_matrix()
 
 
     def get_pairwise_data_and_shape(self, sample_1, sample_2):
@@ -2602,31 +2885,77 @@ class VariabilityFixationIndex():
 
 
     def get_FST(self, sample_1, sample_2):
+        if sample_1 == sample_2:
+            # Samples are by definition a distance 0 from themselves
+            return 0
+
         pi_S1 = self.get_intra_sample_diversity(sample_1)
         pi_S2 = self.get_intra_sample_diversity(sample_2)
         pi_S1_S2 = self.get_inter_sample_diversity(sample_1, sample_2)
-        try:
-            return 1 - (pi_S1 + pi_S2) / 2 / pi_S1_S2
-        except ZeroDivisionError:
-            # The inter-sample diversity 0, so fixation index is undefined
-            return np.nan
+
+        if pi_S1_S2 == 0:
+            # The samples exhibit the exact same variation. It is as if sample_1 == sample_2
+            return 0
+
+        return 1 - (pi_S1 + pi_S2) / 2 / pi_S1_S2
 
 
     def get_intra_sample_diversity(self, sample):
-        """Note: This measure is unnormalized"""
+        """Calculates the intra-sample diversity for a given sample_id.
+
+        Parameters
+        ==========
+        sample : str
+            A sample id
+
+        Returns
+        =======
+        pi : float
+            Unnormalized intra-sample diversity. What this means is that the result has not been
+            divided by the genome length. This is not an issue when calculating FST = 1 - (intra1 +
+            intra2)/2 / inter, since anvio also calculates an unnormalized inter-sample diversity,
+            so that the 1/genome_length factors cancel out.
+        """
+
         sample_data = self.v.data[self.v.data['sample_id'] == sample]
         coverages = sample_data['coverage'].values
         matrix = sample_data[self.v.items].values
 
         outer_product = matrix[:,:,None] * matrix[:,None,:]
         diagonals = outer_product * np.broadcast_to(np.identity(outer_product.shape[1])[None, ...], outer_product.shape)
-        intra_sample_diversity = np.sum((outer_product - diagonals) * (coverages / (coverages - 1))[:,None,None], axis=(0,1,2))
+
+        # The sum at each position is multiplied by the factor coverage/(coverage-1). If
+        # coverage==1, there is no diversity so the contribution should be 0, but the equation
+        # yields undefined. So we artificially enforce a dividend of 1 in this case so contribution
+        # ends up being 1
+        dividend = coverages - 1
+        dividend[dividend == 0] = 1
+
+        intra_sample_diversity = np.sum((outer_product - diagonals) * (coverages / dividend)[:,None,None], axis=(0,1,2))
 
         return intra_sample_diversity
 
 
     def get_inter_sample_diversity(self, sample_1, sample_2):
-        """Note: This measure is unnormalized"""
+        """Calculates the inter-sample diversity for a given sample_id.
+
+        Parameters
+        ==========
+        sample_1 : str
+            A sample id
+
+        sample_2 : str
+            A sample id
+
+        Returns
+        =======
+        pi : float
+            Unnormalized inter-sample diversity. What this means is that the result has not been
+            divided by the genome length. This is not an issue when calculating FST = 1 - (intra1 +
+            intra2)/2 / inter, since anvio also calculates an unnormalized intra-sample diversity,
+            so that the 1/genome_length factors cancel out.
+        """
+
         pairwise_data, tensor_shape = self.get_pairwise_data_and_shape(sample_1, sample_2)
 
         # V/\
@@ -2644,16 +2973,20 @@ class VariabilityFixationIndex():
         self.fst_matrix = np.zeros((dimension, dimension))
 
         indices_to_calculate = (dimension * (dimension + 1)) / 2
-        self.progress.new('Calculating pairwise fixation indices', progress_total_items=indices_to_calculate)
+        self.progress.new('Fixation index', progress_total_items=indices_to_calculate)
 
+        count = 0
         for i, sample_1 in enumerate(sample_ids):
             for j, sample_2 in enumerate(sample_ids):
                 if i > j:
                     self.fst_matrix[i, j] = self.fst_matrix[j, i]
                 else:
                     self.progress.increment()
-                    self.progress.update('{} with {}; Time elapsed: {}'.format(sample_1, sample_2, self.progress.t.time_elapsed()))
                     self.fst_matrix[i, j] = self.get_FST(sample_1, sample_2)
+                    count += 1
+
+                if count % 10 == 0:
+                    self.progress.update('%d/%d pairwise comparisons; %s elapsed' % (count, indices_to_calculate, self.progress.t.time_elapsed()))
 
         if not self.keep_negatives:
             self.fst_matrix[self.fst_matrix < 0] = 0

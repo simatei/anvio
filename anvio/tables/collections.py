@@ -39,11 +39,6 @@ class TablesForCollections(Table):
 
         Table.__init__(self, self.db_path, self.version, run, progress)
 
-        # set these dudes so we have access to unique IDs:
-        self.set_next_available_id(t.collections_bins_info_table_name)
-        self.set_next_available_id(t.collections_contigs_table_name)
-        self.set_next_available_id(t.collections_splits_table_name)
-
 
     def delete(self, collection_name):
         utils.is_this_name_OK_for_database('collection name', collection_name, stringent=False)
@@ -60,9 +55,36 @@ class TablesForCollections(Table):
             database._exec('''DELETE FROM %s WHERE collection_name = "%s" AND \
                                                    bin_name = "%s"''' % (table_name, collection_name, bin_name))
 
-        self.run.warning('All previous entries for "%s" of "%s" is being removed from "%s"' % 
-                        (bin_name,collection_name, ', '.join(tables_to_clear)))
+        self.run.warning('All previous entries for "%s" of "%s" is being removed from "%s"'\
+                    % (bin_name,collection_name, ', '.join(tables_to_clear)))
 
+        database.disconnect()
+
+
+    def refresh_collections_info_table(self, collection_name):
+        """For a given collection, re-read most up-to-date information from the collection splits table and update collections info table"""
+        database = db.DB(self.db_path, utils.get_required_version_for_db(self.db_path))
+
+        collection_names_in_db = database.get_single_column_from_table(t.collections_splits_table_name, 'collection_name', unique=True)
+
+        if collection_name not in collection_names_in_db:
+            database.disconnect()
+            raise ConfigError(f"The collection name '{collection_name}' is not in the collections table :/")
+
+        where_clause = f'collection_name="{collection_name}"'
+        # please note that this is not unique yet and it is intentional
+        bin_names_in_collection = database.get_single_column_from_table(t.collections_splits_table_name, 'bin_name', where_clause=where_clause)
+
+        num_splits_in_collection = len(bin_names_in_collection)
+        bin_names_in_collection = sorted(list(set(bin_names_in_collection)))
+        database.disconnect()
+
+        self.delete_entries_for_key('collection_name', collection_name, [t.collections_info_table_name])
+
+        db_entries = tuple([collection_name, num_splits_in_collection, len(bin_names_in_collection), ','.join(bin_names_in_collection)])
+
+        database = db.DB(self.db_path, utils.get_required_version_for_db(self.db_path))
+        database._exec('''INSERT INTO %s VALUES (?,?,?,?)''' % t.collections_info_table_name, db_entries)
         database.disconnect()
 
 
@@ -74,9 +96,9 @@ class TablesForCollections(Table):
 
         if bins_info_dict:
             if set(collection_dict.keys()) - set(bins_info_dict.keys()):
-                raise ConfigError('Bins in the collection dict do not match to the ones in the bins info dict.\
-                                    They do not have to be identical, but for each bin id, there must be a unique\
-                                    entry in the bins informaiton dict. There is something wrong with your input :/')
+                raise ConfigError('Bins in the collection dict do not match to the ones in the bins info dict. '
+                                   'They do not have to be identical, but for each bin id, there must be a unique '
+                                   'entry in the bins informaiton dict. There is something wrong with your input :/')
 
         if drop_collection:
             # remove any pre-existing information for 'collection_name'
@@ -85,9 +107,9 @@ class TablesForCollections(Table):
         num_splits_in_collection_dict = sum([len(splits) for splits in list(collection_dict.values())])
         splits_in_collection_dict = set(list(chain.from_iterable(list(collection_dict.values()))))
         if len(splits_in_collection_dict) != num_splits_in_collection_dict:
-            raise ConfigError("TablesForCollections::append: %d of the split or contig IDs appear more than once in\
-                                your collections input. It is unclear to anvi'o how did you manage to do this, but we\
-                                cannot go anywhere with this :/" % (num_splits_in_collection_dict - len(splits_in_collection_dict)))
+            raise ConfigError("TablesForCollections::append: %d of the split or contig IDs appear more than once in "
+                               "your collections input. It is unclear to anvi'o how did you manage to do this, but we "
+                               "cannot go anywhere with this :/" % (num_splits_in_collection_dict - len(splits_in_collection_dict)))
 
         database = db.DB(self.db_path, utils.get_required_version_for_db(self.db_path))
 
@@ -95,7 +117,6 @@ class TablesForCollections(Table):
         bin_names = list(collection_dict.keys())
 
         if drop_collection:
-            # push information about this search result into serach_info table.
             db_entries = tuple([collection_name, num_splits_in_collection_dict, len(bin_names), ','.join(bin_names)])
             database._exec('''INSERT INTO %s VALUES (?,?,?,?)''' % t.collections_info_table_name, db_entries)
 
@@ -105,17 +126,16 @@ class TablesForCollections(Table):
                 bins_info_dict[bin_name] = {'html_color': colors[bin_name], 'source': 'UNKNOWN'}
 
         # populate bins info table.
-        db_entries = [(self.next_id(t.collections_bins_info_table_name), collection_name, b, bins_info_dict[b]['source'], bins_info_dict[b]['html_color']) for b in bin_names]
-        database._exec_many('''INSERT INTO %s VALUES (?,?,?,?,?)''' % t.collections_bins_info_table_name, db_entries)
+        db_entries = [(collection_name, b, bins_info_dict[b]['source'], bins_info_dict[b]['html_color']) for b in bin_names]
+        database._exec_many('''INSERT INTO %s VALUES (?,?,?,?)''' % t.collections_bins_info_table_name, db_entries)
 
         # populate splits table
         db_entries = []
         for bin_name in collection_dict:
             for split_name in collection_dict[bin_name]:
-                db_entries.append(tuple([self.next_id(t.collections_splits_table_name), collection_name, split_name, bin_name]))
-        database._exec_many('''INSERT INTO %s VALUES (?,?,?,?)''' % t.collections_splits_table_name, db_entries)
+                db_entries.append(tuple([collection_name, split_name, bin_name]))
+        database._exec_many('''INSERT INTO %s VALUES (?,?,?)''' % t.collections_splits_table_name, db_entries)
         num_splits = len(db_entries)
-
 
         # FIXME: This function can be called to populate the contigs database (via anvi-populate-collections), or
         # the profile database. when it is contigs database, the superclass Table has the self.splits_info variable
@@ -133,8 +153,8 @@ class TablesForCollections(Table):
                                                 % (len(splits_only_in_collection_dict), len(splits_in_collection_dict), collection_name))
 
             if len(splits_only_in_db):
-                self.run.warning('%d of %d splits found in the database were missing from the "%s" results. If this\
-                                          does not make any sense, please make sure you know why before going any further.'\
+                self.run.warning('%d of %d splits found in the database were missing from the "%s" results. If this '
+                                         'does not make any sense, please make sure you know why before going any further.'\
                                                 % (len(splits_only_in_db), len(self.splits_info), collection_name))
 
             # then populate contigs table.
@@ -147,13 +167,13 @@ class TablesForCollections(Table):
         num_bins_to_report = 50
         if not drop_collection:
             bins_to_report = bin_names
-            bin_report_msg = "Here is a full list of the bin names added to this collection: {}.".format(",".join(bins_to_report))
+            bin_report_msg = "Here is a full list of the bin names added to this collection: {}.".format(", ".join(bins_to_report))
         elif num_bins <= num_bins_to_report:
             bins_to_report = bin_names
-            bin_report_msg = "Here is a full list of the bin names in this collection: {}.".format(",".join(bins_to_report))
+            bin_report_msg = "Here is a full list of the bin names in this collection: {}.".format(", ".join(bins_to_report))
         else:
             bins_to_report = bin_names[:num_bins_to_report]
-            bin_report_msg = "Here is a list of the first {} bin names in this collection: {}.".format(num_bins_to_report, ",".join(bins_to_report))
+            bin_report_msg = "Here is a list of the first {} bin names in this collection: {}.".format(num_bins_to_report, ", ".join(bins_to_report))
 
         if drop_collection:
             self.run.info('Collections', 'The collection "%s" that describes %s splits and %s bins has been successfully added to the\
@@ -184,7 +204,6 @@ class TablesForCollections(Table):
             else:
                 contigs_processed.add(contig_name)
 
-            db_entry = tuple([self.next_id(t.collections_contigs_table_name), collection_name, contig_name, split_to_bin_name[split_name]])
-            db_entries_for_contigs.append(db_entry)
+            db_entries_for_contigs.append(tuple([collection_name, contig_name, split_to_bin_name[split_name]]))
 
         return db_entries_for_contigs

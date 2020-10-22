@@ -27,7 +27,7 @@ var COG_categories = {
 }
 
 var named_functional_sources = {
-    'EGGNOG (BACT)': {
+    'EGGNOG_BACT': {
         'accession_decorator': (function (d) {
                                     return '<a href="http://www.uniprot.org/uniprot/?query=' + d + '&sort=score" target="_blank">' + d + '</a>';
                                 }),
@@ -38,6 +38,27 @@ var named_functional_sources = {
         'accession_decorator': (function (d) {
                                     var cogs = d.split(', ').map((function (c){return '<a href="https://www.ncbi.nlm.nih.gov/Structure/cdd/cddsrv.cgi?uid=' + c +'" target=_"blank">' + c + '</a>';}));
                                     return cogs.join(', ');
+                                }),
+    },
+
+    'KOfam': {
+        'accession_decorator': (function (d) {
+                                    var kos = d.split(', ').map((function (c){return '<a href="https://www.genome.jp/dbget-bin/www_bget?ko:' + c +'" target=_"blank">' + c + '</a>';}));
+                                    return kos.join(', ');
+                                }),
+    },
+
+    'KEGG_Module': {
+        'accession_decorator': (function (d) {
+                                    var modules = d.split(', ').map((function (c){return '<a href="https://www.genome.jp/kegg-bin/show_module?' + c +'" target=_"blank">' + c + '</a>';}));
+                                    return modules.join(', ');
+                                }),
+    },
+
+    'Pfam': {
+        'accession_decorator': (function (d) {
+                                    var pfams = d.split(', ').map((function (c){return '<a href="https://pfam.xfam.org/family/' + c +'" target=_"blank">' + c + '</a>';}));
+                                    return pfams.join(', ');
                                 }),
     },
 
@@ -64,7 +85,29 @@ var named_functional_sources = {
 }
 
 
+function getPrettyFunctionsString(fstring, source) {
+    if (!fstring)
+        return ["-"];
+    else
+        farray = fstring.split('!!!');
+
+        if ((source == null) || source == '' || source == 'None')
+            return farray.join(' / ');
+        else {
+            var dec = new Array();
+
+            for (f in farray)
+                dec.push(decorateAccession(source, farray[f]))
+
+            return dec.join(' / ')
+        }
+}
+
+
 function decorateAccession(source, accession_id){
+    if (!accession_id)
+        return accession_id;
+
     if (source in named_functional_sources){
         if ('accession_decorator' in named_functional_sources[source]){
             return named_functional_sources[source]['accession_decorator'](accession_id);
@@ -338,8 +381,8 @@ var named_layers = {
 };
 
 named_category_colors = {
-    'KNOWN'    : '#00AA00',
-    'UNKNOWN'  : '#F0F0F0',
+    'KNOWN'    : '#233B43',
+    'UNKNOWN'  : '##65ADC',
     'ECG'      : '#00AA00',
     'EAG'      : '#AA0000',
     'NA'       : '#F0F0F0',
@@ -347,7 +390,13 @@ named_category_colors = {
     'TSA'      : '#0000AA',
     'TNC'      : '#00AA00',
     'TNA'      : '#00d1ca',
-    'NaN'      : '#73727a'
+    'NaN'      : '#73727a',
+    'K'        : '#233B43',
+    'KWP'      : '#556C74',
+    'GU'       : '#65ADC2',
+    'EU'       : '#E84646',
+    'SINGL'    : '#BCC8CC',
+    'DISC'     : '#BCC8CC'
 };
 
 function getNamedCategoryColor(name)
@@ -426,13 +475,20 @@ function getNamedLayerDefaults(layer, attribute, default_value, group)
     }
 
     if (typeof group !== 'undefined' && group.startsWith('ANI_')) {
-        if (group === 'ANI_percentage_identity') {
+        if (group === 'ANI_percentage_identity' || group === 'ANI_full_percentage_identity' || group === 'ANI_ani') {
             if (attribute == 'min') return 0.7;
             if (attribute == 'max') return 1;
         }
 
         if (attribute == 'height') return '180';
         if (attribute == 'color')  return '#FF0000';
+        if (attribute == 'color-start')  return '#F2F2F2';
+        if (attribute == 'type')   return 'intensity';
+    }
+
+    if (typeof group !== 'undefined' && group.startsWith('SourMash_')) {
+        if (attribute == 'height') return '180';
+        if (attribute == 'color')  return '#FF006F';
         if (attribute == 'color-start')  return '#F2F2F2';
         if (attribute == 'type')   return 'intensity';
     }
@@ -446,9 +502,24 @@ function getNamedLayerDefaults(layer, attribute, default_value, group)
 
     /* Some ad-hoc manipulation of special hmms_ single hmm layers */
     if (layer.substring(0, 5) == "hmms_"){
+        if (attribute == 'type') return 'intensity';
         if (attribute == 'height') return '150';
         if (attribute == 'norm')   return 'sqrt';
-        if (attribute == 'color')  return '#882222'
+
+        if (layer.substring(0, 13) == "hmms_Transfer"){
+            console.log(layer, attribute);
+            if (attribute == 'color-start')  return '#bfd9f3';
+            if (attribute == 'color')  return '#226ab2';
+        }
+        else if (layer.substring(0, 14) == "hmms_Ribosomal"){
+            if (attribute == 'color-start')  return '#FFDDDD';
+            if (attribute == 'color')  return '#882222';
+        }
+        else {
+            if (attribute == 'color')  return '#444444';
+            if (attribute == 'color-start')  return '#DDDDDD';
+        }
+
     }
 
     if (layer in named_layers)

@@ -19,8 +19,9 @@ import base64
 import random
 import getpass
 import argparse
-import requests
 import datetime
+import importlib
+
 from hashlib import md5
 from multiprocessing import Process
 from ete3 import Tree
@@ -33,8 +34,10 @@ import anvio.dbops as dbops
 import anvio.utils as utils
 import anvio.drivers as drivers
 import anvio.terminal as terminal
+import anvio.constants as constants
 import anvio.summarizer as summarizer
 import anvio.filesnpaths as filesnpaths
+import anvio.taxonomyops.scg as scgtaxonomyops
 import anvio.auxiliarydataops as auxiliarydataops
 
 from anvio.serverAPI import AnviServerAPI
@@ -63,6 +66,9 @@ class BottleApplication(Bottle):
     def __init__(self, interactive, mock_request=None, mock_response=None):
         super(BottleApplication, self).__init__()
         self.interactive = interactive
+
+        # WSGI for bottle to use
+        self._wsgi_for_bottle = "paste"
 
         if self.interactive:
             self.args = self.interactive.args
@@ -96,6 +102,13 @@ class BottleApplication(Bottle):
             response = mock_response
         else:
             from bottle import response, request
+
+        # if there is a contigs database, and scg taxonomy was run on it get an instance
+        # of the SCG Taxonomy class early on:
+        if A('contigs_db') and dbops.ContigsDatabase(A('contigs_db')).meta['scg_taxonomy_was_run']:
+            self.scg_taxonomy = scgtaxonomyops.SCGTaxonomyEstimatorSingle(argparse.Namespace(contigs_db=self.interactive.contigs_db_path))
+        else:
+            self.scg_taxonomy = None
 
 
     def set_password(self, password):
@@ -159,21 +172,45 @@ class BottleApplication(Bottle):
         self.route('/data/get_column_info',                    callback=self.get_column_info, method='POST')
         self.route('/data/get_structure/<gene_callers_id:int>',callback=self.get_structure)
         self.route('/data/get_variability',                    callback=self.get_variability, method='POST')
+        self.route('/data/store_variability',                  callback=self.store_variability, method='POST')
+        self.route('/data/store_structure_as_pdb',             callback=self.store_structure_as_pdb, method='POST')
+        self.route('/data/get_gene_function_info/<gene_callers_id:int>',             callback=self.get_gene_function_info)
+        self.route('/data/get_model_info/<gene_callers_id:int>',             callback=self.get_model_info)
         self.route('/data/filter_gene_clusters',               callback=self.filter_gene_clusters, method='POST')
         self.route('/data/reroot_tree',                        callback=self.reroot_tree, method='POST')
         self.route('/data/save_tree',                          callback=self.save_tree, method='POST')
         self.route('/data/check_homogeneity_info',             callback=self.check_homogeneity_info, method='POST')
         self.route('/data/search_items',                       callback=self.search_items_by_name, method='POST')
+        self.route('/data/get_taxonomy',                       callback=self.get_taxonomy, method='POST')
+        self.route('/data/get_functions_for_gene_clusters',    callback=self.get_functions_for_gene_clusters, method='POST')
+        self.route('/data/get_gene_info/<gene_callers_id>',    callback=self.get_gene_info)
+        self.route('/data/get_metabolism',                     callback=self.get_metabolism)
 
 
     def run_application(self, ip, port):
+        # check for the wsgi module bottle will use.
+        if not importlib.util.find_spec(self._wsgi_for_bottle):
+            raise ConfigError("Anvi'o uses `%(wsgi)s` as a web server gateway interface, and you don't seem to have it. Which "
+                              "means bad news. But the good news is that you can actually install it very easily. If you are "
+                              "in a conda environment, try 'conda install %(wsgi)s'. If you are in a Python environment "
+                              "try 'pip install %(wsgi)s'. If you are not sure, start with conda, if it doesn't work, try pip." \
+                                    % {'wsgi': self._wsgi_for_bottle})
+
         try:
-            server_process = Process(target=self.run, kwargs={'host': ip, 'port': port, 'quiet': True, 'server': 'cherrypy'})
-            server_process.start()
+            # allow output to terminal when debugging
+            if anvio.DEBUG:
+                server_process = Process(target=self.run, kwargs={'host': ip, 'port': port, 'quiet': False, 'server': self._wsgi_for_bottle})
+                server_process.start()
+            else:
+                with terminal.SuppressAllOutput():
+                    server_process = Process(target=self.run, kwargs={'host': ip, 'port': port, 'quiet': True, 'server': self._wsgi_for_bottle})
+                    server_process.start()
+
+            url = "http://%s:%d" % (ip, port)
 
             if self.export_svg:
                 try:
-                    utils.run_selenium_and_export_svg("http://%s:%d/app/index.html" % (ip, port),
+                    utils.run_selenium_and_export_svg("/".join([url, "app/index.html"]),
                                                       self.args.export_svg,
                                                       browser_path=self.browser_path,
                                                       run=run)
@@ -189,24 +226,34 @@ class BottleApplication(Bottle):
                 # I have added sleep below to delay web browser little bit.
                 time.sleep(1.5)
 
-                utils.open_url_in_browser(url="http://%s:%d" % (ip, port),
-                                          browser_path=self.browser_path,
-                                          run=run)
+                utils.open_url_in_browser(url=url, browser_path=self.browser_path, run=run)
 
-            run.info_single('The server is now listening the port number "%d". When you are finished, press CTRL+C to terminate the server.' % port, 'green', nl_before = 1, nl_after=1)
+                run.info_single("The server is up and running 🎉", mc='green', nl_before = 1)
+
+                run.warning("If you are using OSX and if the server terminates prematurely before you can see anything in your browser, "
+                            "try running the same command by putting 'sudo ' at the beginning of it (you will be prompted to enter your "
+                            "password if sudo requires super user credentials on your system). If your browser does not show up, try "
+                            "manually entering the URL shown below into the address bar of your favorite browser. *cough* CHROME *cough*.")
+
+            run.info('Server address', url, mc="green", nl_before=1, nl_after=1)
+
+            run.info_single("When you are ready, press CTRL+C once to terminate the server and go back to the command line.", nl_after=1)
+
             server_process.join()
         except KeyboardInterrupt:
-            run.warning('The server is being terminated.', header='Please wait...')
+            run.info_single("The server is being terminated...", mc="red", nl_before=1)
             server_process.terminate()
             sys.exit(0)
 
 
     def redirect_to_app(self):
-        homepage = 'index.html' 
+        homepage = 'index.html'
         if self.interactive.mode == 'contigs':
             homepage = 'contigs.html'
         elif self.interactive.mode == 'structure':
             homepage = 'structure.html'
+        elif self.interactive.mode == 'metabolism':
+            homepage = 'metabolism.html'
         elif self.interactive.mode == 'inspect':
             redirect('/app/charts.html?id=%s&show_snvs=true&rand=%s' % (self.interactive.inspect_split_name, self.random_hash(8)))
 
@@ -227,10 +274,10 @@ class BottleApplication(Bottle):
             index = 0
             for result in re.finditer(pattern, ret.body.read()):
                 pos = result.end(3)
-                suffix = b'?rand=' + self.random_hash(32).encode() 
+                suffix = b'?rand=' + self.random_hash(32).encode()
 
-                # read chunk from original file and write to buffer, 
-                # then store pos to index, next iteration we are going 
+                # read chunk from original file and write to buffer,
+                # then store pos to index, next iteration we are going
                 # to read from that position
                 ret.body.seek(index)
                 buff.write(ret.body.read(pos - index))
@@ -256,39 +303,12 @@ class BottleApplication(Bottle):
 
 
     def get_news(self):
-        ret = []
-        try:
-            news_markdown = requests.get('https://raw.githubusercontent.com/merenlab/anvio/master/NEWS.md')
-            news_items = news_markdown.text.split("***")
-
-            """ FORMAT
-            # Title with spaces (01.01.1970) #
-            Lorem ipsum, dolor sit amet
-            ***
-            # Title with spaces (01.01.1970) #
-            Lorem ipsum, dolor sit amet
-            ***
-            # Title with spaces (01.01.1970) #
-            Lorem ipsum, dolor sit amet
-            """
-            for news_item in news_items:
-                if len(news_item) < 5:
-                    # too short to parse, just skip it
-                    continue
-
-                ret.append({
-                        'date': news_item.split("(")[1].split(")")[0].strip(),
-                        'title': news_item.split("#")[1].split("(")[0].strip(),
-                        'content': news_item.split("#\n")[1].strip()
-                    })
-        except:
-            ret.append({
-                    'date': '',
-                    'title': 'Something has failed',
-                    'content': 'Anvi\'o failed to retrieve any news for you, maybe you do not have internet connection or something :('
-                })
-
-        return json.dumps(ret)
+        if self.interactive.anvio_news:
+            return json.dumps(self.interactive.anvio_news)
+        else:
+            return json.dumps([{'date': '',
+                                'title': 'No news for you :(',
+                                'content': "Anvi'o couldn't bring any news for you. You can bring yourself to the news by clicking [here](%s)." % constants.anvio_news_url}])
 
 
     def random_hash(self, size=8):
@@ -300,7 +320,7 @@ class BottleApplication(Bottle):
         if name == "init":
             bin_prefix = "Bin_"
             if self.interactive.mode == 'refine':
-                bin_prefix = list(self.interactive.bins)[0] + "_" if len(self.interactive.bins) == 1 else "Refined_",
+                bin_prefix = list(self.interactive.bin_names_of_interest)[0] + "_" if len(self.interactive.bin_names_of_interest) == 1 else "Refined_",
 
             default_view = self.interactive.default_view
             default_order = self.interactive.p_meta['default_item_order']
@@ -501,13 +521,13 @@ class BottleApplication(Bottle):
         if self.interactive.mode == 'inspect':
             if self.interactive.state_autoload:
                 state = json.loads(self.interactive.states_table.states[self.interactive.state_autoload]['content'])
-                layers = [layer for layer in sorted(self.interactive.p_meta['samples']) if (layer not in state['layers'] or float(state['layers'][layer]['height']) > 0)]    
+                layers = [layer for layer in sorted(self.interactive.p_meta['samples']) if (layer not in state['layers'] or float(state['layers'][layer]['height']) > 0)]
             else:
                 layers = [layer for layer in sorted(self.interactive.p_meta['samples'])]
 
                 # anvi-inspect is called so there is no state stored in localstorage written by main anvio plot
                 # and there is no default state in the database, we are going to generate a mock state.
-                # only the keys we need is enough. 
+                # only the keys we need is enough.
                 state['layer-order'] = layers
                 state['layers'] = {}
                 for layer in layers:
@@ -528,6 +548,7 @@ class BottleApplication(Bottle):
             data['coverage'] = [coverages[layer].tolist() for layer in layers]
         except:
             data['coverage'] = [[0] * self.interactive.splits_basic_info[split_name]['length']]
+
         data['sequence'] = self.interactive.split_sequences[split_name]
 
         ## get the variability information dict for split:
@@ -542,7 +563,9 @@ class BottleApplication(Bottle):
             data['variability'].append(split_variability_info_dict[layer]['variability'])
 
         levels_occupied = {1: []}
-        for entry_id in  self.interactive.split_name_to_genes_in_splits_entry_ids[split_name]:
+        gene_entries_in_split = self.interactive.split_name_to_genes_in_splits_entry_ids[split_name]
+
+        for entry_id in gene_entries_in_split:
             gene_callers_id =  self.interactive.genes_in_splits[entry_id]['gene_callers_id']
             p =  self.interactive.genes_in_splits[entry_id]
             # p looks like this at this point:
@@ -558,9 +581,13 @@ class BottleApplication(Bottle):
             p['direction'] =  self.interactive.genes_in_contigs_dict[gene_callers_id]['direction']
             p['start_in_contig'] =  self.interactive.genes_in_contigs_dict[gene_callers_id]['start']
             p['stop_in_contig'] =  self.interactive.genes_in_contigs_dict[gene_callers_id]['stop']
+            p['call_type'] =  self.interactive.genes_in_contigs_dict[gene_callers_id]['call_type']
             p['complete_gene_call'] = 'No' if  self.interactive.genes_in_contigs_dict[gene_callers_id]['partial'] else 'Yes'
             p['length'] = p['stop_in_contig'] - p['start_in_contig']
             p['functions'] =  self.interactive.gene_function_calls_dict[gene_callers_id] if gene_callers_id in  self.interactive.gene_function_calls_dict else None
+
+            # get amino acid sequence for the gene call:
+            p['aa_sequence'] = self.interactive.get_sequences_for_gene_callers_ids([gene_callers_id], include_aa_sequences=True)[1][gene_callers_id]['aa_sequence']
 
             for level in levels_occupied:
                 level_ok = True
@@ -583,6 +610,48 @@ class BottleApplication(Bottle):
         progress.end()
 
         return json.dumps(data)
+
+
+    def get_gene_info(self, gene_callers_id):
+        # TO DO: there are three functions returns gene info dict for different purposes
+        # this needs to be organized.
+
+        gene_callers_id = int(gene_callers_id)
+        split_name = self.interactive.gene_callers_id_to_split_name_dict[gene_callers_id]
+
+        # we need eentry id
+        entry_id = None
+        for candidate_entry_id in self.interactive.split_name_to_genes_in_splits_entry_ids[split_name]:
+            if int(gene_callers_id) == int(self.interactive.genes_in_splits[candidate_entry_id]['gene_callers_id']):
+                entry_id = candidate_entry_id
+
+
+        if not entry_id:
+            raise ConfigError("Can not find this gene_callers_id in any splits.")
+
+        p =  self.interactive.genes_in_splits[entry_id]
+        # p looks like this at this point:
+        #
+        # {'percentage_in_split': 100,
+        #  'start_in_split'     : 16049,
+        #  'stop_in_split'      : 16633}
+        #  'prot'               : u'prot2_03215',
+        #  'split'              : u'D23-1contig18_split_00036'}
+        #
+        # we will add a bit more attributes:
+        p['source'] =  self.interactive.genes_in_contigs_dict[gene_callers_id]['source']
+        p['direction'] =  self.interactive.genes_in_contigs_dict[gene_callers_id]['direction']
+        p['start_in_contig'] =  self.interactive.genes_in_contigs_dict[gene_callers_id]['start']
+        p['stop_in_contig'] =  self.interactive.genes_in_contigs_dict[gene_callers_id]['stop']
+        p['call_type'] =  self.interactive.genes_in_contigs_dict[gene_callers_id]['call_type']
+        p['complete_gene_call'] = 'No' if  self.interactive.genes_in_contigs_dict[gene_callers_id]['partial'] else 'Yes'
+        p['length'] = p['stop_in_contig'] - p['start_in_contig']
+        p['functions'] =  self.interactive.gene_function_calls_dict[gene_callers_id] if gene_callers_id in  self.interactive.gene_function_calls_dict else None
+
+        # get amino acid sequence for the gene call:
+        p['aa_sequence'] = self.interactive.get_sequences_for_gene_callers_ids([gene_callers_id], include_aa_sequences=True)[1][gene_callers_id]['aa_sequence']
+
+        return json.dumps(p)
 
 
     def search_items_by_name(self):
@@ -722,6 +791,9 @@ class BottleApplication(Bottle):
             p['length'] = p['stop_in_contig'] - p['start_in_contig']
             p['functions'] =  self.interactive.gene_function_calls_dict[gene_callers_id] if gene_callers_id in  self.interactive.gene_function_calls_dict else None
 
+            # get amino acid sequence for the gene call:
+            p['aa_sequence'] = self.interactive.get_sequences_for_gene_callers_ids([gene_callers_id], include_aa_sequences=True)[1][gene_callers_id]['aa_sequence']
+
             for level in levels_occupied:
                 level_ok = True
                 for gene_tuple in levels_occupied[level]:
@@ -755,7 +827,8 @@ class BottleApplication(Bottle):
         items_order_entry = self.interactive.p_meta['item_orders'][order_name]
         items_order = None
         if items_order_entry['type'] == 'newick':
-            items_order = utils.get_names_order_from_newick_tree(items_order_entry['data'])
+            names_with_only_digits_ok = self.interactive.mode == 'gene'
+            items_order = utils.get_names_order_from_newick_tree(items_order_entry['data'], names_with_only_digits_ok=names_with_only_digits_ok)
         else:
             items_order = items_order_entry['data']
 
@@ -842,8 +915,8 @@ class BottleApplication(Bottle):
                 run.info_single('Lousy attempt from the user to store their collection under "%s" :/' % source)
                 return json.dumps("Well, '%s' is a read-only collection, so you need to come up with a different name... Sorry!" % source)
 
-        run.info_single('A request to store %d bins that describe %d splits under the collection id "%s"\
-                         has been made.' % (len(data), num_splits, source), cut_after=None)
+        run.info_single('A request to store %d bins that describe %d splits under the collection id "%s" '
+                        'has been made.' % (len(data), num_splits, source), cut_after=None)
 
         bins_info_dict = {}
         for bin_name in data:
@@ -957,15 +1030,18 @@ class BottleApplication(Bottle):
             return json.dumps({'error': "Gene caller id does not seem to be 'integerable'. Not good :/"})
 
         try:
-            gene_calls_tuple = self.interactive.get_sequences_for_gene_callers_ids([gene_callers_id])
+            gene_calls_tuple = self.interactive.get_sequences_for_gene_callers_ids([gene_callers_id], include_aa_sequences=True)
         except Exception as e:
             return json.dumps({'error': "Something went wrong when I tried to access to that gene: '%s' :/" % e})
 
         entry = gene_calls_tuple[1][gene_callers_id]
+
         sequence = entry['sequence']
+        aa_sequence = entry['aa_sequence']
+
         header = '%d|' % (gene_callers_id) + '|'.join(['%s:%s' % (k, str(entry[k])) for k in ['contig', 'start', 'stop', 'direction', 'rev_compd', 'length']])
 
-        return json.dumps({'sequence': sequence, 'header': header})
+        return json.dumps({'sequence': sequence, 'aa_sequence': aa_sequence, 'header': header})
 
 
     def get_gene_popup_for_pan(self, gene_callers_id, genome_name):
@@ -991,7 +1067,7 @@ class BottleApplication(Bottle):
             return json.dumps({'error': "You are in 'collection' mode, but your collection is empty. You are killing me."})
 
         if self.interactive.hmm_access is None:
-            return json.dumps({'error': "HMMs for single-copy core genes were not run for this contigs database. "})            
+            return json.dumps({'error': "HMMs for single-copy core genes were not run for this contigs database. "})
 
         hmm_sequences_dict = self.interactive.hmm_access.get_sequences_dict_for_hmm_hits_in_splits({bin_name: set(self.interactive.collection[bin_name])})
         gene_sequences = utils.get_filtered_dict(hmm_sequences_dict, 'gene_name', set([gene_name]))
@@ -1231,6 +1307,10 @@ class BottleApplication(Bottle):
         return json.dumps(self.interactive.get_column_info(gene_callers_id, engine))
 
 
+    def get_metabolism(self):
+        return json.dumps(self.interactive.get_metabolism_data())
+
+
     def get_structure(self, gene_callers_id):
         return json.dumps(self.interactive.get_structure(gene_callers_id))
 
@@ -1238,6 +1318,24 @@ class BottleApplication(Bottle):
     def get_variability(self):
         options = json.loads(request.forms.get('options'))
         return self.interactive.get_variability(options)
+
+
+    def store_variability(self):
+        options = json.loads(request.forms.get('options'))
+        return self.interactive.store_variability(options)
+
+
+    def store_structure_as_pdb(self):
+        options = json.loads(request.forms.get('options'))
+        return self.interactive.store_structure_as_pdb(options)
+
+
+    def get_gene_function_info(self, gene_callers_id):
+        return json.dumps(self.interactive.get_gene_function_info(gene_callers_id))
+
+
+    def get_model_info(self, gene_callers_id):
+        return json.dumps(self.interactive.get_model_info(gene_callers_id))
 
 
     def filter_gene_clusters(self):
@@ -1285,3 +1383,44 @@ class BottleApplication(Bottle):
         new_newick = re.sub(r"base32(\w*)", lambda m: base64.b32decode(m.group(1).replace('_','=')).decode('utf-8'), new_newick)
 
         return json.dumps({'newick': new_newick})
+
+
+    def get_taxonomy(self):
+        collection = json.loads(request.forms.get('collection'))
+
+        if not self.scg_taxonomy:
+            message = "You first need to run `anvi-run-scg-taxonomy` on your contigs database for this to work :("
+            run.warning(message)
+            return json.dumps({'status': 1, 'message': message})
+
+        output = {}
+        try:
+            for bin_name in collection:
+                output[bin_name] = self.scg_taxonomy.estimate_for_list_of_splits(collection[bin_name], bin_name=bin_name)
+
+            run.info_single('Taxonomy estimation has been requested for bin(s) "%s".' % (", ".join(collection.keys())))
+        except Exception as e:
+            message = str(e.clear_text()) if hasattr(e, 'clear_text') else str(e)
+            return json.dumps({'status': 1, 'message': message})
+
+        return json.dumps(output)
+
+
+    def get_functions_for_gene_clusters(self):
+        if not len(self.interactive.gene_clusters_function_sources):
+            message = "Gene cluster functions seem to have not been initialized, so that button has nothing to show you :/ Please carry on."
+            run.warning(message)
+            return json.dumps({'status': 1, 'message': message})
+
+        gene_cluster_names = json.loads(request.forms.get('gene_clusters'))
+
+        d = {}
+        for gene_cluster_name in gene_cluster_names:
+            if gene_cluster_name not in self.interactive.gene_clusters_functions_summary_dict:
+                message = (f"At least one of the gene clusters in your list (e.g., {gene_cluster_name}) is missing in "
+                           f"the functions summary dict :/")
+                return json.dumps({'status': 1, 'message': message})
+                
+            d[gene_cluster_name] = self.interactive.gene_clusters_functions_summary_dict[gene_cluster_name]
+
+        return json.dumps({'functions': d, 'sources': list(self.interactive.gene_clusters_function_sources)})

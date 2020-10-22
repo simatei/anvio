@@ -22,8 +22,10 @@ __license__ = "GPL 3.0"
 __version__ = anvio.__version__
 __maintainer__ = "A. Murat Eren"
 __email__ = "a.murat.eren@gmail.com"
+__provides__ = ["collection", "bin"]
+__requires__ = ["pan-db", "profile-db", "contigs-db"]
 __description__ = ("A script to add a 'DEFAULT' collection in an anvi'o pan or profile database with "
-                   "a bin named 'EVERYTHING' that describes all items available in the profile database.")
+                   "a bin named 'EVERYTHING' that describes all items available in the profile database")
 
 pp = terminal.pretty_print
 run = terminal.Run()
@@ -35,32 +37,40 @@ def main(args):
 
     if utils.get_db_type(args.pan_or_profile_db) == 'profile' and utils.is_blank_profile(args.pan_or_profile_db):
         if not args.contigs_db:
-            raise ConfigError("Yes but anvi'o can't add a 'default' collection into a blank profile database (yes, yours is a\
-                               blank profile database). The reason to that is because blank profile databases do not know about\
-                               the items names they pretend to know. Why? Well, it is a long story, BUT FORTUNATELY, you can\
-                               recover from this by providing the contigs database your blank profile is associated with, and\
-                               things would likely work.")
+            raise ConfigError("Yes but anvi'o can't add a 'default' collection into a blank profile database (yes, yours is a "
+                              "blank profile database). The reason to that is because blank profile databases do not know about "
+                              "the items names they pretend to know. Why? Well, it is a long story, BUT FORTUNATELY, you can "
+                              "recover from this by providing the contigs database your blank profile is associated with, and "
+                              "things would likely work.")
         else:
             utils.is_profile_db_and_contigs_db_compatible(args.pan_or_profile_db, args.contigs_db)
             all_items = dbops.ContigsDatabase(args.contigs_db).db.get_single_column_from_table(splits_info_table_name, 'split')
     else:
         if args.contigs_db:
-            run.warning("You should provide a contigs database to this script only if you are working with an anvi'o blank\
-                         profile database, which doesn't seem to be the case here. Anvi'o did think about raising an error\
-                         and killing your awesome analysis on its track in the name of being explicit, but then it decided\
-                         to ignore it for this once. Basically, the contigs database you provided will not be utilized for\
-                         anything.")
+            run.warning("You should provide a contigs database to this script only if you are working with an anvi'o blank "
+                        "profile database, which doesn't seem to be the case here. Anvi'o did think about raising an error "
+                        "and killing your awesome analysis on its track in the name of being explicit, but then it decided "
+                        "to ignore it for this once. Basically, the contigs database you provided will not be utilized for "
+                        "anything.")
 
         all_items = utils.get_all_item_names_from_the_database(args.pan_or_profile_db)
 
     collections_table = TablesForCollections(args.pan_or_profile_db)
-    collections_table.append('DEFAULT', {'EVERYTHING': all_items})
+    collections_table.append(args.collection_name, {args.bin_id: all_items})
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__description__)
 
     parser.add_argument(*anvio.A('pan-or-profile-db'), **anvio.K('pan-or-profile-db'))
     parser.add_argument(*anvio.A('contigs-db'), **anvio.K('contigs-db', {'required': False}))
+    parser.add_argument(*anvio.A('bin-id'), **anvio.K('bin-id', {'required': False,
+                                                                 'help': "Name for the new bin. If you don't provide any then \
+                                                                          it will be named \"EVERYTHING\".",
+                                                                 'default': "EVERYTHING"}))
+    parser.add_argument(*anvio.A('collection-name'), **anvio.K('collection-name', {'required': False,
+                                                               'help': "Name for the new collection. If you don't provide any then \
+                                                                        it will be named \"DEFAULT\".",
+                                                               'default': "DEFAULT"}))
 
     args = anvio.get_args(parser)
 

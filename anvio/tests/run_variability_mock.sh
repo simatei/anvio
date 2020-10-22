@@ -30,10 +30,10 @@ then
     cd sandbox
     rm -rf test-output
     mkdir test-output
-    
+
     INFO "Anvo'o version"
     anvi-profile --version
-    
+
     INFO "Generating a Bowtie2 ref"
     bowtie2-build single_contig.fa test-output/single_contig
 
@@ -51,10 +51,10 @@ then
         INFO "Profiling the BAM file"
         anvi-profile -i test-output/$sample.bam -c test-output/single_contig.db -o test-output/$sample-PROFILE -M 0 --profile-SCVs
     done
-    
+
 
     INFO "Merging all"
-    anvi-merge test-output/*/PROFILE.db -c test-output/single_contig.db -o test-output/SAMPLES-MERGED --skip-concoct-binning
+    anvi-merge test-output/*/PROFILE.db -c test-output/single_contig.db -o test-output/SAMPLES-MERGED
 
 elif [ $1 = "continue"  ]
 then
@@ -81,7 +81,7 @@ then
         done
 
         INFO "Merging all"
-        anvi-merge test-output/*/PROFILE.db -c test-output/single_contig.db -o test-output/SAMPLES-MERGED --skip-concoct-binning
+        anvi-merge test-output/*/PROFILE.db -c test-output/single_contig.db -o test-output/SAMPLES-MERGED
     fi
 else
       echo "
@@ -108,7 +108,14 @@ anvi-gen-variability-profile -p test-output/SAMPLES-MERGED/PROFILE.db \
                              --quince-mode \
                              --engine NT
 
-column -t test-output/variability_NT.txt | head
+INFO "anvi-gen-variability for NT no quince"
+anvi-gen-variability-profile -p test-output/SAMPLES-MERGED/PROFILE.db \
+                             -c test-output/single_contig.db \
+                             -o test-output/variability_NT_no_quince.txt \
+                             --splits-of-interest test-output/splits_of_interest.txt \
+                             --engine NT
+
+head test-output/variability_NT.txt
 
 INFO "anvi-gen-variability for AA"
 anvi-gen-variability-profile -p test-output/SAMPLES-MERGED/PROFILE.db \
@@ -118,7 +125,7 @@ anvi-gen-variability-profile -p test-output/SAMPLES-MERGED/PROFILE.db \
                              --quince-mode \
                              --engine AA
 
-column -t test-output/variability_AA.txt | head
+head test-output/variability_AA.txt
 
 INFO "anvi-gen-variability for CDN"
 anvi-gen-variability-profile -p test-output/SAMPLES-MERGED/PROFILE.db \
@@ -128,10 +135,67 @@ anvi-gen-variability-profile -p test-output/SAMPLES-MERGED/PROFILE.db \
                              --quince-mode \
                              --engine CDN
 
-column -t test-output/variability_CDN.txt | head
+head test-output/variability_CDN.txt
 
 
-INFO "Do you want thhe interactive interface? Run the following:"
+INFO "anvi-gen-fixation-index-matrix for NT"
+anvi-gen-fixation-index-matrix -p test-output/SAMPLES-MERGED/PROFILE.db \
+                               -c test-output/single_contig.db \
+                               -o test-output/fixation_NT.txt \
+                               --splits-of-interest test-output/splits_of_interest.txt \
+                               --engine NT
+
+INFO "anvi-gen-fixation-index-matrix for NT with external table"
+anvi-gen-fixation-index-matrix -V test-output/variability_NT.txt \
+                               -o test-output/fixation_NT_external.txt \
+                               --engine NT
+
+INFO "anvi-gen-fixation-index-matrix for NT with external table no quince"
+anvi-gen-fixation-index-matrix -V test-output/variability_NT_no_quince.txt \
+                               -o test-output/fixation_NT_external_no_quince.txt \
+                               --engine NT
+
+INFO "diff between test-output/fixation_NT_external.txt and test-output/fixation_NT.txt (should be same)"
+cat test-output/fixation_NT.txt
+cat test-output/fixation_NT_external.txt
+
+INFO "comparison between test-output/fixation_NT_external_no_quince.txt and test-output/fixation_NT_external.txt"
+INFO "(the value should be the same but the order of the samples becomes arbitrary)"
+cat test-output/fixation_NT_external_no_quince.txt
+cat test-output/fixation_NT_external.txt
+
+INFO "anvi-gen-fixation-index-matrix for NT with external table no quince"
+rm -rf test-output/pn_ps_ratio_output
+anvi-script-calculate-pn-ps-ratio -a test-output/variability_AA.txt \
+                                  -b test-output/variability_CDN.txt \
+                                  -c test-output/single_contig.db \
+                                  -o test-output/pn_ps_ratio_output \
+                                  -m 10 \
+                                  -i 3
+
+INFO "anvi-gen-gene-consensus-sequences for gene mode"
+anvi-gen-gene-consensus-sequences -p test-output/SAMPLES-MERGED/PROFILE.db \
+                                  -c test-output/single_contig.db \
+                                  -o test-output/consensus_sequence_gene.fa \
+                                  --gene-caller-ids 0
+cat test-output/consensus_sequence_gene.fa
+
+INFO "anvi-gen-gene-consensus-sequences for gene mode compressed samples"
+anvi-gen-gene-consensus-sequences -p test-output/SAMPLES-MERGED/PROFILE.db \
+                                  -c test-output/single_contig.db \
+                                  -o test-output/consensus_sequence_gene_compressed.fa \
+                                  --gene-caller-ids 0 \
+                                  --compress
+cat test-output/consensus_sequence_gene_compressed.fa
+
+INFO "anvi-gen-gene-consensus-sequences for contigs mode"
+anvi-gen-gene-consensus-sequences -p test-output/SAMPLES-MERGED/PROFILE.db \
+                                  -c test-output/single_contig.db \
+                                  -o test-output/consensus_sequence_contig.fa \
+                                  --contigs-mode
+cat test-output/consensus_sequence_contig.fa
+
+INFO "Do you want the interactive interface? Run the following:"
 
 echo "anvi-interactive -p `pwd`/test-output/SAMPLES-MERGED/PROFILE.db -c `pwd`/test-output/single_contig.db"
 echo

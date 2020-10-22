@@ -120,7 +120,7 @@ $(document).ready(function() {
     }
 
     $('#tree_type').change(function() {
-        if ($('#tree_type').val()=='circlephylogram') 
+        if ($('#tree_type').val()=='circlephylogram')
         {
             $('.phylogram_settings').hide();
             $('.circlephylogram_settings').show();
@@ -168,7 +168,7 @@ $(document).ready(function() {
         if ($(this).hasClass('disabled')) {
             e.preventDefault();
             return false;
-        }  
+        }
     });
 
     if (!$.browser.chrome)
@@ -238,11 +238,11 @@ function initData() {
             var available_views = response.views[2];
             $('#views_container').append(getComboBoxContent(default_view, available_views));
 
-            $("#tbody_layers").sortable({helper: fixHelperModified, handle: '.drag-icon', items: "> tr"}).disableSelection(); 
-            $("#tbody_samples").sortable({helper: fixHelperModified, handle: '.drag-icon', items: "> tr"}).disableSelection(); 
-                        
+            $("#tbody_layers").sortable({helper: fixHelperModified, handle: '.drag-icon', items: "> tr"}).disableSelection();
+            $("#tbody_samples").sortable({helper: fixHelperModified, handle: '.drag-icon', items: "> tr"}).disableSelection();
+
             let merged = samplesMergeStackbarLayers(response.layers_information, response.layers_information_default_order);
-            
+
             samples_order_dict = response.layers_order;
             samples_information_dict = merged['dict'];
             let samples_information_default_layer_order = merged['default_order'];
@@ -273,11 +273,11 @@ function initData() {
             if (response.functions_sources.length > 0) {
                 $('#functions_sources_list').empty();
             }
-            
+
             response.functions_sources.forEach((source) => {
                 $('#functions_sources_list').append(`<label style="margin: 5px;"><input type="checkbox" value="${source}" checked="checked" style="margin-right: 2px;"/>${source}</label>`);
             });
-            
+
             buildSamplesTable(convert_samples_order_to_array(samples_information_default_layer_order));
             toggleSampleGroups();
             changeViewData(response.views[1]);
@@ -292,7 +292,11 @@ function initData() {
             $('.loading-screen').hide();
 
             bins = new Bins(response.bin_prefix, document.getElementById('tbody_bins'));
+
+            // redoing intiial bin causes some weird behaviors
+            bins.keepHistory = false;
             bins.NewBin();
+            bins.keepHistory = true;
 
             if (response.autodraw)
             {
@@ -310,7 +314,7 @@ function initData() {
                         setTimeout(toggleLeftPanel, 500);
                     }
                  });
-            } 
+            }
         }
     });
 }
@@ -428,11 +432,11 @@ function onViewChange() {
     $('#views_container').prop('disabled', false);
     $('#btn_draw_tree').prop('disabled', true);
 
-    waitingDialog.show('Requesting view data from the server ...', 
+    waitingDialog.show('Requesting view data from the server ...',
         {
-            dialogSize: 'sm', 
+            dialogSize: 'sm',
             onHide: function() {
-                defer.resolve(); 
+                defer.resolve();
             },
             onShow: function() {
                 $.ajax({
@@ -455,7 +459,7 @@ function changeViewData(view_data) {
     layerdata = mergeStackbarLayers(view_data);
     parameter_count = layerdata[0].length;
 
-    // since we are painting parent layers odd-even, 
+    // since we are painting parent layers odd-even,
     // we should remove single parents (single means no parent)
     removeSingleParents(); // in utils.js
 
@@ -547,14 +551,14 @@ function populateColorDicts() {
                 for (var j=0; j < bars.length; j++)
                 {
                     stack_bar_colors[layer_id][bars[j]] = getNamedCategoryColor(bars[j]);
-                    
+
                     let sum = 0;
                     for (let i=1; i < layerdata.length; i++) {
                         sum += parseFloat(layerdata[i][layer_id].split(';')[j]);
                     }
 
                     stack_bar_stats[layer_id][bars[j]] = sum;
-                } 
+                }
             }
         }
 
@@ -620,7 +624,7 @@ function populateColorDicts() {
                             }
 
                             samples_stack_bar_stats[group][sample_layer_name][item_name] = sum;
-                        } 
+                        }
                     }
                 }
                 else // categorical
@@ -660,7 +664,7 @@ function buildLegendTables() {
         $('#legend_settings').accordion("destroy");
         $('#legend_settings').empty();
     }
-    
+
     legends = [];
 
     for (let pindex in categorical_data_colors)
@@ -693,7 +697,7 @@ function buildLegendTables() {
             'item_names': names,
             'item_keys': names,
             'stats': stack_bar_stats[pindex]
-        });    
+        });
     }
 
     for (let group in samples_categorical_colors) {
@@ -757,7 +761,7 @@ function buildLegendTables() {
                                 <td class="col-md-10">
                                     <input type="radio" name="batch_rule_`+i+`" value="all" checked> All <br />
                                     <input type="radio" name="batch_rule_`+i+`" value="name"> Name contains <input type="text" id="name_rule_`+i+`" size="8"><br />
-                                    <input type="radio" name="batch_rule_`+i+`" value="count"> Count 
+                                    <input type="radio" name="batch_rule_`+i+`" value="count"> Count
                                         <select id="count_rule_`+i+`">
                                             <option selected>==</option>
                                             <option>&lt;</option>
@@ -831,7 +835,7 @@ function batchColor(legend_id) {
                     window[legend['source']][legend['group']][legend['key']][legend['item_keys'][i]] = color;
                 }
             }
-        } 
+        }
         else if (rule == 'count') {
             if (eval("legend['stats'][legend['item_keys'][i]] " + unescape($('#count_rule_'+legend_id).val()) + " " + parseFloat($('#count_rule_value_'+legend_id).val()))) {
                 if (typeof legend['group'] === 'undefined') {
@@ -870,13 +874,13 @@ function createLegendColorPanel(legend_id) {
             _name = _name + ' (' + legend['stats'][_name] + ')';
         }
 
-        template = template + '<div style="float: left; width: 50%; display: inline-block; padding: 3px 5px;">' + 
+        template = template + '<div style="float: left; width: 50%; display: inline-block; padding: 3px 5px;">' +
                                 '<div class="colorpicker-base legendcolorpicker" color="' + _color + '"' +
                                 'style="margin-right: 5px; background-color: ' + _color + '"' +
                                 'callback_source="' + legend['source'] + '"' +
                                 'callback_group="' + ((typeof legend['group'] !== 'undefined') ? legend['group'] : '') + '"' +
                                 'callback_pindex="' + legend['key'] + '"' +
-                                'callback_name="' + legend['item_keys'][j] + '"' + 
+                                'callback_name="' + legend['item_keys'][j] + '"' +
                                '></div>' + _name + '</div>';
     }
 
@@ -915,7 +919,7 @@ function orderLegend(legend_id, type) {
 
 function loadOrderingAdditionalData(order) {
     collapsedNodes = [];
-    
+
     if (order.hasOwnProperty('additional')) {
         let orders_additional = order['additional'];
 
@@ -935,13 +939,13 @@ function onTreeClusteringChange() {
     $('#trees_container').prop('disabled', true);
     $('#btn_draw_tree').prop('disabled', true);
 
-    waitingDialog.show('Requesting the tree data ...', 
+    waitingDialog.show('Requesting the tree data ...',
         {
-            dialogSize: 'sm', 
-            onHide: function() { 
-                defer.resolve(); 
+            dialogSize: 'sm',
+            onHide: function() {
+                defer.resolve();
             },
-            onShow: function() {    
+            onShow: function() {
                 $.ajax({
                     type: 'GET',
                     cache: false,
@@ -951,7 +955,7 @@ function onTreeClusteringChange() {
                         loadOrderingAdditionalData(order);
 
                         $('#trees_container').attr('disabled', false);
-                        $('#btn_draw_tree').attr('disabled', false); 
+                        $('#btn_draw_tree').attr('disabled', false);
                         waitingDialog.hide();
                     }
                 });
@@ -972,7 +976,7 @@ function syncViews() {
 
             views[current_view][layer_id] = {};
             views[current_view][layer_id]["normalization"] = $(layer).find('.normalization').val();
-            views[current_view][layer_id]["min"] = {'value': $(layer).find('.input-min').val(), 'disabled': $(layer).find('.input-min').is(':disabled') }; 
+            views[current_view][layer_id]["min"] = {'value': $(layer).find('.input-min').val(), 'disabled': $(layer).find('.input-min').is(':disabled') };
             views[current_view][layer_id]["max"] = {'value': $(layer).find('.input-max').val(), 'disabled': $(layer).find('.input-max').is(':disabled') };
 
             layers[layer_id]["color"] = $(layer).find('.colorpicker:last').attr('color');
@@ -984,7 +988,7 @@ function syncViews() {
             if (layers[layer_id]["type"] === 'text')
                 layers[layer_id]["height"] = '0';
         }
-    );    
+    );
 }
 
 
@@ -1022,7 +1026,7 @@ function getComboBoxContent(default_item, available_items){
 
 function buildLayersTable(order, settings)
 {
-    for (var i = 0; i < order.length; i++) 
+    for (var i = 0; i < order.length; i++)
     {
         // common layer variables
         var layer_id = order[i];
@@ -1051,12 +1055,12 @@ function buildLayersTable(order, settings)
         {
            layer_types[layer_id] = 0;
 
-            if (hasLayerSettings) 
+            if (hasLayerSettings)
             {
                 var height = layer_settings['height'];
                 var margin = layer_settings['margin'];
             }
-            else 
+            else
             {
                 var height = '50';
                 var margin = '15';
@@ -1084,7 +1088,7 @@ function buildLayersTable(order, settings)
         //
         // stack bar layer
         //
-        else if (layer_name.indexOf(';') > -1) 
+        else if (layer_name.indexOf(';') > -1)
         {
             layer_types[layer_id] = 1;
 
@@ -1096,7 +1100,7 @@ function buildLayersTable(order, settings)
             else
             {
                 var height = '300';
-                var margin = '15';           
+                var margin = '15';
             }
 
             if (hasViewSettings)
@@ -1155,7 +1159,7 @@ function buildLayersTable(order, settings)
             // categorical layer
             //
             if (!is_numeric)
-            { 
+            {
                 layer_types[layer_id] = 2;
 
                 if (hasLayerSettings)
@@ -1180,7 +1184,7 @@ function buildLayersTable(order, settings)
                         var type = 'color';
                     }
 
-                    // set default categorical layer type to 'text' 
+                    // set default categorical layer type to 'text'
                     // if there are more than 11 unique values and leaf count is less than 300
                     // 301 because layerdata has one extra row for the titles
                     if (layerdata.length <= 301)
@@ -1201,7 +1205,7 @@ function buildLayersTable(order, settings)
                         }
                     }
                 }
-                
+
                 var template = '<tr>' +
                     '<td><img class="drag-icon" src="images/drag.gif" /></td>' +
                     '<td title="{name}" class="titles" id="title{id}">{short-name}</td>' +
@@ -1234,7 +1238,7 @@ function buildLayersTable(order, settings)
                                    .replace(new RegExp('{margin}', 'g'), margin);
 
                 $('#tbody_layers').append(template);
-            } 
+            }
             //
             // numerical layer
             //
@@ -1276,8 +1280,8 @@ function buildLayersTable(order, settings)
                         var type = getNamedLayerDefaults(layer_name, 'type', 'intensity');
                         var color_start = "#EEEEEE";
                     } else {
-                        var type = 'bar'
-                        var color_start = "#FFFFFF";
+                        var type = getNamedLayerDefaults(layer_name, 'type', 'bar');
+                        var color_start = getNamedLayerDefaults(layer_name, 'color-start', '#FFFFFF');
                     }
                 }
 
@@ -1326,7 +1330,7 @@ function buildLayersTable(order, settings)
 
                 $('#tbody_layers').append(template);
             }
-            
+
         }
 
         $('#tbody_layers .input-height:last').change(function (ev) {
@@ -1391,7 +1395,7 @@ function getLayerName(layer_id)
     return layerdata[0][layer_id];
 }
 
-function getLayerId(layer_name) 
+function getLayerId(layer_name)
 {
     for (var i=0; i < parameter_count; i++)
     {
@@ -1430,13 +1434,15 @@ function serializeSettings(use_layer_names) {
     state['max-font-size'] = $('#max_font_size').val();
     state['optimize-speed'] = $('#optimize_speed').is(':checked');
     state['show-bin-labels'] = $('#show_bin_labels').is(':checked');
+    state['begins-from-branch'] = $('#begins_from_branch').is(':checked');
     state['bin-labels-font-size'] = $('#bin_labels_font_size').val();
     state['autorotate-bin-labels'] = $('#autorotate_bin_labels').is(':checked');
+    state['estimate-taxonomy'] = $('#estimate_taxonomy').is(':checked');
     state['bin-labels-angle'] = $('#bin_labels_angle').val();
     state['background-opacity'] = $('#background_opacity').val();
     state['max-font-size-label'] = $('#max_font_size_label').val();
     state['draw-guide-lines'] = $('#draw_guide_lines').val();
-    
+
     // sync views object and layers table
     syncViews();
 
@@ -1550,11 +1556,11 @@ function drawTree() {
     // clear existing diagram, if any
     document.getElementById('svg').innerHTML = "";
 
-    waitingDialog.show('Drawing ...', 
+    waitingDialog.show('Drawing ...',
         {
-            dialogSize: 'sm', 
+            dialogSize: 'sm',
             onHide: function() {
-                defer.resolve(); 
+                defer.resolve();
             },
             onShow: function() {
                 try {
@@ -1565,13 +1571,13 @@ function drawTree() {
                     let issue_title = encodeURIComponent("Interactive interface, " + error);
                     let issue_body = encodeURIComponent("Anvi'o version: `" + ANVIO_VERSION + "`\n```\n" + error.stack + "```");
 
-                    showDraggableDialog('An exception occured', 
+                    showDraggableDialog('An exception occured',
                         '<textarea style="width: 100%; height: 360px;">' + error.stack + '</textarea>\
                         <a target="_blank" href="https://github.com/merenlab/anvio/issues/new?title='+issue_title+'&body='+issue_body+'&labels=bug,interface">\
                             <button type="button" class="btn btn-success btn-sm">Report this on GitHub</button>\
                         </a> * Requires GitHub account.');
                 }
-                
+
                 // last_settings used in export svg for layer information,
                 // we didn't use "settings" sent to draw_tree because draw_tree updates layer's min&max
                 last_settings = serializeSettings();
@@ -1592,6 +1598,7 @@ function drawTree() {
 
     return defer.promise();
 }
+
 
 function showContigNames(bin_id, updateOnly) {
     if (typeof updateOnly === 'undefined')
@@ -1688,11 +1695,12 @@ function showCompleteness(bin_id, updateOnly) {
 
     var msg = '<table class="table table-striped sortable">' +
               '<thead><tr>' +
-                  '<th>&nbsp;</th>' + 
-                  '<th data-sortcolumn="1" data-sortkey="1-0">Domain</th>' + 
-                  '<th data-sortcolumn="2" data-sortkey="2-0">Domain Confidence</th>' + 
-                  '<th data-sortcolumn="3" data-sortkey="3-0">Completion</th>' + 
-                  '<th data-sortcolumn="4" data-sortkey="4-0">Redundancy</th>' + 
+                  '<th>&nbsp;</th>' +
+                  '<th data-sortcolumn="1" data-sortkey="1-0">Domain</th>' +
+                  '<th data-sortcolumn="2" data-sortkey="2-0">Domain Confidence</th>' +
+                  '<th data-sortcolumn="3" data-sortkey="3-0">HMM Source</th>' +
+                  '<th data-sortcolumn="4" data-sortkey="4-0">Completion</th>' +
+                  '<th data-sortcolumn="5" data-sortkey="5-0">Redundancy</th>' +
               '</tr></thead><tbody>';
 
     for (let source in stats){
@@ -1711,7 +1719,9 @@ function showCompleteness(bin_id, updateOnly) {
         } else {
             msg += "<td data-value='N/A'>N/A</td>";
         }
-        
+
+        msg += "<td data-value='" + stats[source]['source'] + "'>" + stats[source]['source'] + "</td>";
+
         msg += "<td data-value='" + stats[source]['percent_completion'] + "'>" + stats[source]['percent_completion'].toFixed(2) + "%</td>" +
                "<td data-value='" + stats[source]['percent_redundancy'] + "'>" + stats[source]['percent_redundancy'].toFixed(2) + "%</td>";
 
@@ -1725,10 +1735,85 @@ function showCompleteness(bin_id, updateOnly) {
     showDraggableDialog(title, msg, updateOnly);
 }
 
+
+function showGeneClusterDetails(bin_id, updateOnly) {
+    if (typeof updateOnly === 'undefined')
+        updateOnly = false;
+
+    var title = 'Gene clusters in "' + $('#bin_name_' + bin_id).val() + '"';
+
+    if (updateOnly && !checkObjectExists('#modal' + title.hashCode()))
+        return;
+
+    let bin_info = bins.ExportBin(bin_id);
+    console.log(bin_info);
+
+    $.ajax({
+        type: 'POST',
+        url: '/data/get_functions_for_gene_clusters',
+        data: {
+            'gene_clusters': JSON.stringify(bin_info['items'], null, 4),
+        },
+        success: (response) => {
+            if (response.hasOwnProperty('status') && response.status != 0) {
+                toastr.error('"' + response.message + '", the server said.', "The anvi'o headquarters is upset");
+                return;
+            }
+
+            let content = `<table class="table table-striped">
+                           <thead class="thead-light">
+                           <tr>
+                             <th>Gene cluster</th>
+                             <th>Source</th>
+                             <th>Accession</th>
+                             <th>Function</th>
+                           </tr>
+                           </thead>
+
+                           <tbody>`;
+
+            // building the table for each gene cluster
+            Object.keys(response['functions']).map(function(gene_cluster_name) {
+
+                let d = response['functions'][gene_cluster_name];
+
+                Object.keys(response['sources']).map(function(index) {
+                    let function_source = response['sources'][index];
+
+                    accession_string = getPrettyFunctionsString(d[function_source]['accession'], function_source)
+                    function_string = getPrettyFunctionsString(d[function_source]['function'])
+
+
+                    if (index == 0) {
+                        content += `<tr style="border-top: 3px solid #d0d0d0;">
+                                    <td rowspan="${  Object.keys(response['sources']).length }"><b>${ gene_cluster_name }</b></td>
+                                    <td>${ function_source }</a></td>
+                                    <td>${ accession_string }</td>
+                                    <td>${ function_string }</td>
+                                    </tr>`;
+                    } else {
+                        content += `<tr>
+                                    <td>${ function_source }</a></td>
+                                    <td>${ accession_string }</td>
+                                    <td>${ function_string }</td>
+                                    </tr>`;
+                    }
+                });
+            });
+
+        content += `</tbody></table>`
+
+        showGeneClusterFunctionsSummaryTableDialog('A summary of functions for ' + bin_info['items'].length + ' gene clusters in "' + bin_info['bin_name'] + '".', content + '</table>');
+        }
+    });
+
+}
+
+
 function showRedundants(bin_id, updateOnly) {
     if (typeof updateOnly === 'undefined')
         updateOnly = false;
-    
+
     if (!bins.cache['completeness'].hasOwnProperty(bin_id))
         return;
 
@@ -1794,7 +1879,7 @@ function showRedundants(bin_id, updateOnly) {
 }
 
 function exportSvg(dontDownload) {
-    if (!drawer) 
+    if (!drawer)
         return;
 
     // draw bin and layer legend to output svg
@@ -1811,13 +1896,13 @@ function exportSvg(dontDownload) {
             };
 
             if (mode == 'pan') {
-                _bin_info['gene_clusters'] = $('#completeness_' + bin_id).val(); 
-                _bin_info['gene-calls'] = $('#redundancy_' + bin_id).val(); 
+                _bin_info['gene_clusters'] = $('#completeness_' + bin_id).val();
+                _bin_info['gene-calls'] = $('#redundancy_' + bin_id).val();
             } else {
                 _bin_info['contig-length'] = $('#contig_length_' + bin_id).html();
                 _bin_info['contig-count'] = $('#contig_count_' + bin_id).val();
             }
-            
+
             bins_to_draw.push(_bin_info);
         }
     );
@@ -1834,9 +1919,11 @@ function exportSvg(dontDownload) {
     // we used current settings because we want current bin information.
     // now we are going to use "last_settings" which updated by draw button.
     var settings = {};
-    settings = last_settings; 
+    settings = last_settings;
     drawLayerLegend(settings['layers'], settings['views'][current_view], settings['layer-order'], top, left);
-    var detached_clones = $('#samples_tree path.clone').detach();
+
+    var detached = $('#tree path.clone').detach();
+    var detachedSamples = $('#samples_tree path.clone').detach();
     drawTitle(last_settings);
     drawLegend();
 
@@ -1851,7 +1938,8 @@ function exportSvg(dontDownload) {
     svgCrowbar();
 
     svg.removeAttribute('viewBox');
-    $('#samples_tree').prepend(detached_clones);
+    $('#tree').prepend(detached);
+    $('#samples_tree').prepend(detachedSamples);
     $('#bin_legend').remove();
     $('#layer_legend').remove();
     $('#title_group').remove();
@@ -1866,8 +1954,8 @@ function storeRefinedBins() {
         type: 'POST',
         cache: false,
         url: '/data/store_refined_bins',
-        data: { 
-            data: JSON.stringify(collection_info['data'], null, 4), 
+        data: {
+            data: JSON.stringify(collection_info['data'], null, 4),
             colors: JSON.stringify(collection_info['colors'], null, 4)
         },
         success: function(data) {
@@ -1925,7 +2013,7 @@ function showSaveStateWindow()
                 var _select = "";
                 if (state_name == current_state_name)
                 {
-                    _select = ' selected="selected"'; 
+                    _select = ' selected="selected"';
                 }
                 $('#saveState_list').append('<option ' + _select + '>' + state_name + '</option>');
             }
@@ -1988,11 +2076,11 @@ function generatePhylogeneticTree() {
     var new_phylogeny_name = $('#phylogeny_name').val();
     var gene_cluster_list = [];
     var gene_clusters_id = $('#phylogeny_gene_cluster').val();
-    
+
     for (const node of bins.selections[gene_clusters_id].values()) {
         if (node.IsLeaf()) {
             gene_cluster_list.push(node.label);
-        } 
+        }
     }
 
     if (gene_cluster_list.length == 0) {
@@ -2035,7 +2123,7 @@ function generatePhylogeneticTree() {
     });
 }
 
-function saveState() 
+function saveState()
 {
     var name = $('#saveState_name').val();
 
@@ -2197,11 +2285,11 @@ function loadState()
     }
 
     var state_name = $('#loadState_list').val();
-    waitingDialog.show('Requesting state data from the server ...', 
+    waitingDialog.show('Requesting state data from the server ...',
         {
-            dialogSize: 'sm', 
+            dialogSize: 'sm',
             onHide: function() {
-                defer.resolve(); 
+                defer.resolve();
             },
             onShow: function() {
                 $.ajax({
@@ -2299,7 +2387,7 @@ function processState(state_name, state) {
         layers = {};
         for (let key in state['layers'])
         {
-            
+
             let layer_id = getLayerId(key);
             if (layer_id != -1)
             {
@@ -2388,6 +2476,9 @@ function processState(state_name, state) {
     if (state.hasOwnProperty('autorotate-bin-labels')) {
         $('#autorotate_bin_labels').prop('checked', state['autorotate-bin-labels']).trigger('change');
     }
+    if (state.hasOwnProperty('estimate-taxonomy')) {
+        $('#estimate_taxonomy').prop('checked', state['estimate-taxonomy']).trigger('change');
+    }
     if (state.hasOwnProperty('show-grid-for-bins')) {
         $('#show_grid_for_bins').prop('checked', state['show-grid-for-bins']).trigger('change');
     }
@@ -2406,6 +2497,9 @@ function processState(state_name, state) {
     if (state.hasOwnProperty('draw-guide-lines')) {
         $('#draw_guide_lines').val(state['draw-guide-lines'])
     }
+    if (state.hasOwnProperty('begins-from-branch')) {
+        $('#begins_from_branch').val(state['begins-from-branch'])
+    }
 
     // reload layers
     var current_view = $('#views_container').val();
@@ -2415,14 +2509,14 @@ function processState(state_name, state) {
         for (let key in state['samples-categorical-colors']) {
             if (key in samples_categorical_colors) {
                 samples_categorical_colors[key] = state['samples-categorical-colors'][key];
-            } 
+            }
         }
     }
     if (state.hasOwnProperty('samples-stack-bar-colors')) {
         for (let key in state['samples-stack-bar-colors']) {
             if (key in samples_stack_bar_colors) {
                 samples_stack_bar_colors[key] = state['samples-stack-bar-colors'][key];
-            } 
+            }
         }
     }
 
@@ -2500,4 +2594,207 @@ function shutdownServer()
             }
         }
     });
+}
+
+function showTaxonomy()
+{
+    let collection_info = bins.ExportCollection();
+
+    $.ajax({
+        type: 'POST',
+        url: '/data/get_taxonomy',
+        data: {
+            'collection': JSON.stringify(collection_info['data'], null, 4),
+        },
+        success: (response) => {
+            if (response.hasOwnProperty('status') && response.status != 0) {
+                toastr.error('"' + response.message + '", the server said.', "The anvi'o headquarters is upset");
+                return;
+            }
+
+            let content = `<table class="table">
+                              <thead class="thead-light">
+                                <tr>
+                                  <th>Bin name</th>
+                                  <th>Total SCGs</th>
+                                  <th>Supporting SCGs</th>
+                                  <th>Domain</th>
+                                  <th>Phylum</th>
+                                  <th>Class</th>
+                                  <th>Order</th>
+                                  <th>Family</th>
+                                  <th>Genus</th>
+                                  <th>Species</th>
+                                </tr>
+                              </thead>
+
+                              <tbody>`;
+
+            let levels_of_taxonomy = ["t_domain", "t_phylum", "t_class", "t_order", "t_family", "t_genus", "t_species"];
+
+            // building the table for each bin
+            Object.keys(response).map(function(bin_name) {
+                let d = response[bin_name];
+
+                content += `<tr>
+                    <td><a data-toggle="collapse" data-parent="#panel-${ bin_name }" href="#collapse-${ bin_name }"><i class="glyphicon glyphicon-chevron-right"></i>&nbsp;${ bin_name }</a></td>
+                    <td class="text-center">${ d['total_scgs'] }</td>
+                    <td class="text-center">${ d['supporting_scgs'] }</td>`;
+
+                levels_of_taxonomy.forEach(function (level, index) {
+                    if (d['consensus_taxonomy'][level] !== null) {
+                        if (level === "t_species")
+                            content += `<td><i>${ d['consensus_taxonomy'][level].replace('_', ' ') }</i></td>`;
+                        else
+                            content += `<td>${ d['consensus_taxonomy'][level].replace('_', ' ') }</td>`;
+                    } else {
+                        content += `<td>--</td>`;
+                    }
+                });
+
+                content += `</tr>`;
+
+                // Building an inner table for each individual SCG within a given bin.
+                let scg_table_content = `<tr id="collapse-${ bin_name }" class="panel-collapse fade collapse" style="background: #acaf3330;"><td colspan="10">
+
+                <table class="table table-striped sortable" id="tblGrid_${ bin_name }">
+
+                    <thead id="tblHead_${ bin_name }">
+                        <tr>
+                            <th>SCG Name</th>
+                            <th>Gene Caller's Id</th>
+                            <th>Percent Identity</th>
+                            <th>&lt;3?</th>
+                            <th>Domain</th>
+                            <th>Phylum</th>
+                            <th>Class</th>
+                            <th>Order</th>
+                            <th>Family</th>
+                            <th>Genus</th>
+                            <th>Species</th>
+                        </tr>
+                    </thead>
+
+                    <tbody>`;
+
+                    // This is the second for loop to build what's going on inside those individual SCG tables
+                    Object.keys(d['scgs']).map(function(scg_id) {
+                        let scg = d['scgs'][scg_id];
+
+                        scg_table_content += `<tr>
+                            <td>${ scg['gene_name'] }</a></td>
+                            <td class="text-center"><a href="#" onclick="showGenePopup(this, '${ scg['gene_callers_id'] }');">${ scg['gene_callers_id'] }</a></td>
+                            <td class="text-center">${ scg['percent_identity'] }</a></td>
+                            <td>${ scg['supporting_consensus'] }</td>`;
+
+                        levels_of_taxonomy.forEach(function (level, index) {
+                            if (scg[level] !== null) {
+                                if (level === "t_species")
+                                    scg_table_content += `<td><i>${ scg[level].replace('_', ' ') }</i></td>`;
+                                else
+                                    scg_table_content += `<td>${ scg[level].replace('_', ' ') }</td>`;
+                            } else {
+                                scg_table_content += `<td>--</td>`;
+                            }
+                        });
+
+                        scg_table_content += `</tr>`;
+                    });
+
+                scg_table_content += `</tbody></table>`;
+
+                if(d['total_scgs'] == 0){
+                    // If actually there are no SCGs for this bin that were useful to estimatet taxonomy,
+                    // don't add the `scg_table_content` to the actual content.
+                    content += `<tr id="collapse-${ bin_name }" class="panel-collapse fade collapse" style="background: #acaf3330;"><td colspan="10">
+                                    None of the contigs in this bin contained SCGs anvi'o could use to estimate taxonomy :/`;
+                } else {
+                    content += scg_table_content;
+                }
+
+                content += `</td></tr>`;
+            });
+
+            showTaxonomyTableDialog('Detailed Table for Taxonomy Estimation', content + '</table>');
+
+            $('.panel-collapse').on('show.bs.collapse', function () {
+                $(this).prev().find('i.glyphicon').removeClass('glyphicon-chevron-right').addClass('glyphicon-chevron-down');
+            });
+
+            $('.panel-collapse').on('hide.bs.collapse', function () {
+               $(this).prev().find('i.glyphicon').removeClass('glyphicon-chevron-down').addClass('glyphicon-chevron-right');
+            });
+        }
+    });
+}
+
+function showGenePopup(element, gene_callers_id) {
+
+    $('[data-toggle="popover"]').popover({"html": true, "trigger": "click", "container": "body", "viewport": "body", "placement": "top"});
+
+    // workaround for known popover bug
+    // source: https://stackoverflow.com/questions/32581987/need-click-twice-after-hide-a-shown-bootstrap-popover
+    $('body').on('hidden.bs.popover', function (e) {
+      $(e.target).data("bs.popover").inState.click = false;
+    });
+
+    $('[data-toggle="popover"]').on('shown.bs.popover', function (e) {
+      var popover = $(e.target).data("bs.popover").$tip;
+
+      if ($(popover).css('top').charAt(0) === '-') {
+        $(popover).css('top', '0px');
+      }
+
+      if ($(popover).css('left').charAt(0) === '-') {
+        $(popover).css('left', '0px');
+      }
+
+      $(popover).draggable();
+    });
+
+    $.ajax({
+            type: 'GET',
+            cache: false,
+            url: '/data/get_gene_info/' + gene_callers_id,
+            data: {'gene_callers_id': gene_callers_id},
+            success: function(gene_data) {
+                $(element).attr('data-content', );
+                $(element).attr('data-toggle', 'popover');
+                var popOverSettings = {
+                    placement: 'bottom',
+                    container: 'body',
+                    html: true,
+                    selector: '[rel="popover"]', // Specify the selector here
+                    content: function () {
+                        return get_gene_functions_table_html(gene_data);
+                    }
+                }
+
+                $(element).popover(popOverSettings);
+                $(element).popover('show');
+            }
+    });
+}
+
+function toggleTaxonomyEstimation() {
+    let is_checked = $('#estimate_taxonomy').is(':checked');
+
+    if (is_checked) {
+        $('.taxonomy-name-label').each((index, elem) => {
+            $(elem).closest('tr').show();
+        });
+    } else {
+        $('.taxonomy-name-label').each((index, elem) => {
+            $(elem).closest('tr').hide();
+        });
+    }
+
+    /*
+        loadState/processState triggers onchange event of inputs
+        which causes problem when state is loaded before bins initialized
+        so we make sure here.
+    */
+    if (bins) {
+        bins.UpdateBinsWindow();
+    }
 }

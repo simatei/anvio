@@ -19,8 +19,14 @@ __license__ = "GPL 3.0"
 __version__ = anvio.__version__
 __maintainer__ = "Evan Kiefl"
 __email__ = "kiefl.evan@gmail.com"
-__requires__ = ['contigs-db', 'profile-db', 'structure-db', 'bin']
+__requires__ = ['contigs-db', 'profile-db', 'structure-db', 'bin', 'variability-profile-txt', 'splits-txt']
 __provides__ = ['fixation-index-matrix']
+__resources__ = [
+    (
+        "Utilizing fixation index to study SAR11 population structure",
+        "http://merenlab.org/data/sar11-saavs/#generating-distance-matrices-from-fixation-index-for-saavs-and-snvs-data"
+    ),
+]
 __description__ = "Generate a pairwise matrix of a fixation indices between samples"
 
 
@@ -58,7 +64,6 @@ if __name__ == '__main__':
     groupG = parser.add_argument_group('FILTERS', 'Parameters that will help you to do a very precise analysis.\
                                                   If you declare nothing from this bunch, you will get "everything"\
                                                   to play with, which is not necessarily a good thing...')
-    groupG.add_argument(*anvio.A('min-occurrence-of-variable-positions'), **anvio.K('min-occurrence-of-variable-positions'))
     groupG.add_argument(*anvio.A('min-coverage-in-each-sample'), **anvio.K('min-coverage-in-each-sample'))
 
     groupH = parser.add_argument_group('OUTPUT', 'Output file and style')
